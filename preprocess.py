@@ -118,18 +118,36 @@ def get_seg_model():
 
 
 def get_pose_model():
-    """MediaPipe Pose (complexity=2, static mode)."""
+    """MediaPipe Pose Landmarker (Tasks API — mediapipe 0.10+)."""
     global _pose_model
     if _pose_model is None:
+        import urllib.request
         import mediapipe as mp
-        log.info("Loading MediaPipe Pose (complexity=2) …")
-        _pose_model = mp.solutions.pose.Pose(
-            static_image_mode=True,
-            model_complexity=2,
-            enable_segmentation=False,
-            min_detection_confidence=0.5,
+        from mediapipe.tasks import python as mp_python
+        from mediapipe.tasks.python import vision as mp_vision
+
+        model_path = Path("models/pose_landmarker_full.task").resolve()
+        model_url  = (
+            "https://storage.googleapis.com/mediapipe-models/pose_landmarker/"
+            "pose_landmarker_full/float16/latest/pose_landmarker_full.task"
         )
-        log.info("  ✓ MediaPipe Pose ready.")
+        if not model_path.exists():
+            log.info("Downloading pose_landmarker_full.task (~7 MB) …")
+            model_path.parent.mkdir(parents=True, exist_ok=True)
+            urllib.request.urlretrieve(model_url, str(model_path))
+            log.info("  ✓ Model saved to %s", model_path)
+
+        base_options = mp_python.BaseOptions(model_asset_path=str(model_path))
+        options = mp_vision.PoseLandmarkerOptions(
+            base_options=base_options,
+            output_segmentation_masks=False,
+            min_pose_detection_confidence=0.5,
+            min_pose_presence_confidence=0.5,
+            min_tracking_confidence=0.5,
+            num_poses=1,
+        )
+        _pose_model = mp_vision.PoseLandmarker.create_from_options(options)
+        log.info("  ✓ MediaPipe Pose Landmarker ready (Tasks API).")
     return _pose_model
 
 
@@ -199,7 +217,7 @@ def _gaussian(H: int, W: int, cx: float, cy: float, sigma: float) -> np.ndarray:
 
 def pose_to_heatmap(img: np.ndarray) -> np.ndarray:
     """
-    Run MediaPipe pose and produce 18-channel Gaussian heatmap.
+    Run MediaPipe Pose Landmarker (Tasks API) and produce 18-channel heatmap.
 
     Args:
         img: float32 RGB (H, W, 3)
@@ -208,22 +226,26 @@ def pose_to_heatmap(img: np.ndarray) -> np.ndarray:
         float32 tensor (18, H, W), each channel ∈ [0, 1]
         Zero tensor if no person detected.
     """
-    pose = get_pose_model()
-    result = pose.process(img.astype(np.uint8))
-    heatmap = np.zeros((18, HEIGHT, WIDTH), dtype=np.float32)
+    import mediapipe as mp
 
-    if result.pose_landmarks is None:
+    detector = get_pose_model()
+    mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=img.astype(np.uint8))
+    result   = detector.detect(mp_image)
+
+    heatmap = np.zeros((18, HEIGHT, WIDTH), dtype=np.float32)
+    if not result.pose_landmarks:
         return heatmap
 
-    lm = result.pose_landmarks.landmark
-    kp_xy = {}   # coco_idx → (cx, cy)
+    landmarks = result.pose_landmarks[0]   # first (only) person
+    kp_xy = {}
 
     for mp_idx, coco_idx in MP_TO_COCO18.items():
-        lmk = lm[mp_idx]
-        cx = lmk.x * WIDTH
-        cy = lmk.y * HEIGHT
-        kp_xy[coco_idx] = (cx, cy)
-        heatmap[coco_idx] = _gaussian(HEIGHT, WIDTH, cx, cy, POSE_SIGMA)
+        lm = landmarks[mp_idx]
+        if lm.visibility >= 0.5:
+            cx = lm.x * WIDTH
+            cy = lm.y * HEIGHT
+            kp_xy[coco_idx] = (cx, cy)
+            heatmap[coco_idx] = _gaussian(HEIGHT, WIDTH, cx, cy, POSE_SIGMA)
 
     # Neck = midpoint(R-shoulder, L-shoulder)
     if 2 in kp_xy and 5 in kp_xy:
@@ -398,8 +420,8 @@ def flush_batch(batch: list, dirs: dict, stats: dict):
 # ──────────────────── SPLIT PIPELINE ──────────────────────────────────────────
 
 def process_split(split: str, dataset_root: Path, batch_size: int, limit: int):
-    person_dir = dataset_root / split / "image"
-    cloth_dir  = dataset_root / split / "cloth"
+    person_dir = dataset_root / "raw" / "image"
+    cloth_dir  = dataset_root / "raw" / "cloth"
     pairs_file = dataset_root / f"{split}_pairs.txt"
 
     if not pairs_file.exists():
@@ -485,7 +507,7 @@ def main():
         help="Which split to preprocess.",
     )
     parser.add_argument(
-        "--dataset", default="d:/Virtual_try_on/dataset",
+        "--dataset", default="d:/Virtul_try_on/dataset",
         help="Path to dataset root (contains train/, test/, *_pairs.txt).",
     )
     parser.add_argument(

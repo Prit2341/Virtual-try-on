@@ -54,7 +54,7 @@ from steps import (
 
 BATCH_SIZE   = 8    # GPU batch size for SegFormer parsing
 MASK_WORKERS = 4    # threads for parallel cloth mask extraction
-DATASET      = Path("d:/Virtual_try_on/dataset")
+DATASET      = Path("d:/Virtul_try_on/dataset")
 
 SUBDIRS = [
     "person", "cloth", "parsing",

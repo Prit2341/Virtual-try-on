@@ -1,1 +1,1 @@
-# model package — VITON-HD 2-stage training
+# VITON-HD model package
