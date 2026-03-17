@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(ls d:/Virtul_try_on/dataset/train/tensors/*.pt)",
+      "Bash(python -c \"import torch; print\\(torch.__version__\\); print\\(''CUDA:'', torch.cuda.is_available\\(\\)\\); print\\(torch.cuda.get_device_name\\(0\\) if torch.cuda.is_available\\(\\) else ''no gpu''\\)\")",
+      "Bash(python -c \":*)",
+      "Bash(python train.py --stage warp --epochs 1 --batch 2 --accum 1 --decay-start 0)",
+      "Bash(timeout 90)"
+    ]
+  }
+}
