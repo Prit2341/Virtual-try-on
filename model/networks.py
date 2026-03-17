@@ -249,6 +249,69 @@ class TryOnNet(nn.Module):
         return self.out_head(torch.cat([d, s1], dim=1))
 
 
+# ─────────────────────────── LIGHT WARP NET ───────────────────────────────────
+
+class LightWarpNet(nn.Module):
+    """
+    Lighter Stage 1 — Flow-based Cloth Warping Network.
+
+    4-level U-Net (instead of 6) with ngf=32 (instead of 64).
+    ~8x fewer parameters than WarpNet. ~5-8 min/epoch vs ~50 min.
+    Same interface as WarpNet — drop-in replacement.
+
+    Spatial sizes at 512×384:
+      down1 : 256 × 192  (32  ch)
+      down2 : 128 × 96   (64  ch)
+      down3 :  64 × 48   (128 ch)
+      down4 :  32 × 24   (256 ch) ← bottleneck
+      up1–3 mirror down3–1
+      flow_head : 512 × 384 (2 ch)
+    """
+
+    def __init__(self, in_ch: int = Config.WARP_IN_CH, ngf: int = 32):
+        super().__init__()
+        # ── Encoder ──────────────────────────────────────────────────────────
+        self.down1 = DownBlock(in_ch,  ngf,     norm=False)   # → 256 × 192
+        self.down2 = DownBlock(ngf,    ngf * 2)               # → 128 × 96
+        self.down3 = DownBlock(ngf*2,  ngf * 4)               # →  64 × 48
+        self.down4 = DownBlock(ngf*4,  ngf * 8)               # →  32 × 24  (bottleneck)
+
+        # ── Decoder ───────────────────────────────────────────────────────────
+        self.up1 = UpBlock(ngf*8, ngf*4, ngf*4)               # →  64 × 48
+        self.up2 = UpBlock(ngf*4, ngf*2, ngf*2)               # → 128 × 96
+        self.up3 = UpBlock(ngf*2, ngf,   ngf)                 # → 256 × 192
+
+        # ── Flow head: 256×192 → 512×384 → 2-ch displacement ─────────────────
+        self.flow_head = nn.Sequential(
+            nn.ConvTranspose2d(ngf * 2, ngf, 4, stride=2, padding=1),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(ngf, 2, 3, padding=1),
+            nn.Tanh(),
+        )
+
+    def forward(
+        self,
+        cloth:      torch.Tensor,
+        cloth_mask: torch.Tensor,
+        agnostic:   torch.Tensor,
+        pose_map:   torch.Tensor,
+    ):
+        x = torch.cat([cloth, cloth_mask, agnostic, pose_map], dim=1)
+
+        s1 = self.down1(x)
+        s2 = self.down2(s1)
+        s3 = self.down3(s2)
+        bn = self.down4(s3)
+
+        d = self.up1(bn, s3)
+        d = self.up2(d,  s2)
+        d = self.up3(d,  s1)
+
+        flow = self.flow_head(torch.cat([d, s1], dim=1))
+        warped_cloth, warped_mask = WarpNet._warp(cloth, cloth_mask, flow)
+        return warped_cloth, warped_mask, flow
+
+
 # ─────────────────────────── PATCH DISCRIMINATOR ──────────────────────────────
 
 class PatchDiscriminator(nn.Module):

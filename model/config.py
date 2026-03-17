@@ -18,7 +18,7 @@ class Config:
     LOG_DIR        = Path("d:/Virtual_try_on/logs")
 
     # ── DataLoader ─────────────────────────────────────────────────────────────
-    BATCH_SIZE  = 12     # RTX 4070 12 GB at 512×384 with AMP (~10 GB used)
+    BATCH_SIZE  = 8      # WarpNet (ngf=64, 6-level) fits comfortably at batch=8 on RTX 4070
     NUM_WORKERS = 4      # Windows: keep 0 (no multiprocessing fork support)
     PIN_MEMORY  = True
 
@@ -27,30 +27,31 @@ class Config:
                          # set False to debug NaN losses
 
     # ── Optimiser ──────────────────────────────────────────────────────────────
-    LR_G   = 2e-4        # generator / warp net learning rate
+    LR_G   = 1e-4        # generator / warp net learning rate
     LR_D   = 2e-4        # discriminator learning rate
     BETA1  = 0.5
     BETA2  = 0.999
 
     # ── Training ───────────────────────────────────────────────────────────────
-    N_EPOCHS      = 100
+    N_EPOCHS      = 30   # 30 epochs is enough to see if the model is learning
     SAVE_EVERY    = 5    # save checkpoint every N epochs
     LOG_EVERY     = 50   # log scalar losses every N iterations
 
     # ── LR Schedule ────────────────────────────────────────────────────────────
     # Linear decay from full LR → 0 over the second half of training.
     # Set LR_DECAY_START = N_EPOCHS to disable decay.
-    LR_DECAY_START = 50  # epoch to begin decay (keep full LR for first 50 epochs)
+    LR_DECAY_START = 15  # epoch to begin decay (keep full LR for first 15 epochs)
 
     # ── Visualisation ──────────────────────────────────────────────────────────
-    LOG_IMAGES_EVERY = 10   # write sample images to TensorBoard every N epochs
+    LOG_IMAGES_EVERY = 5    # write sample images to TensorBoard every N epochs
     VIS_SAMPLES      = 4    # number of samples shown in TensorBoard image grids
 
     # ── Loss weights ───────────────────────────────────────────────────────────
     #   WarpNet
-    LAMBDA_WARP_L1  = 10.0   # L1 on warped cloth vs. ground-truth cloth region
-    LAMBDA_WARP_VGG = 5.0    # VGG perceptual on warped cloth
-    LAMBDA_WARP_TV  = 1.0    # total-variation smoothness on flow field
+    LAMBDA_WARP_L1   = 10.0  # L1 texture: warped cloth vs. ground-truth cloth region
+    LAMBDA_WARP_MASK = 10.0  # mask shape: warped cloth mask vs. upper-body mask (key flow signal)
+    LAMBDA_WARP_VGG  = 2.0   # VGG perceptual on warped cloth
+    LAMBDA_WARP_TV   = 1.0   # flow smoothness + diversity (see flow_loss in train.py)
 
     #   TryOnNet
     LAMBDA_L1   = 10.0   # L1 reconstruction
