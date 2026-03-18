@@ -16,6 +16,7 @@ import os
 import random
 
 import torch
+import torch.nn.functional as F
 import numpy as np
 import cv2
 from pathlib import Path
@@ -88,11 +89,15 @@ def main():
         pose = data["pose_map"].unsqueeze(0).to(DEVICE)
 
         with torch.no_grad():
-            warp_in = torch.cat([ag, pose, cl, cm], 1)
-            flow    = warp_net(warp_in)
-            warped  = warp_cloth(cl, flow)
+            warp_in     = torch.cat([ag, pose, cl, cm], 1)
+            flow        = warp_net(warp_in)
+            warped      = warp_cloth(cl, flow)
+            warped_mask = warp_cloth(cm, flow)
 
-            tryon_in = torch.cat([ag, warped, pose], 1)
+            pm       = data["parse_map"].unsqueeze(0).to(DEVICE)
+            parse_oh = F.one_hot(pm.long(), 18).permute(0, 3, 1, 2).float()
+
+            tryon_in = torch.cat([ag, warped, warped_mask, pose, parse_oh], 1)  # 43ch
             output   = tryon_net(tryon_in)
 
         # Build comparison strip: person | cloth | agnostic | warped | output

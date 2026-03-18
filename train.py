@@ -5,8 +5,8 @@ VITON-HD 2-Stage Training
 Stage 1 (warp):  WarpNet learns cloth deformation flow
 Stage 2 (tryon): TryOnNet synthesizes final try-on image
 
-Optimized for GTX 1650 (4 GB VRAM):
-  batch=2, AMP=on, InstanceNorm, gradient accumulation
+Optimized for RTX 4070 (12 GB VRAM):
+  batch=4 x 2 accum, AMP, channels-last, gradient checkpointing
 
 Usage:
   python train.py --stage warp  --epochs 30
@@ -21,7 +21,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.utils.data import Dataset, DataLoader
-from torch.amp import autocast, GradScaler
+from torch.cuda.amp import autocast, GradScaler
 from torch.utils.tensorboard import SummaryWriter
 from torchvision import models
 from pathlib import Path
@@ -29,25 +29,29 @@ from tqdm import tqdm
 
 from model.warp_model import WarpNet
 from model.tryon_model import TryOnNet
+from model.discriminator import PatchDiscriminator
 from model.warp_utils import warp_cloth
 
-# ── Defaults (GTX 1650) ────────────────────────────────────────────────────────
+# ── Defaults (RTX 4070 12 GB) ──────────────────────────────────────────────────
 
 DEVICE      = "cuda" if torch.cuda.is_available() else "cpu"
 DATA_DIR    = "dataset/train/tensors"
 CKPT_DIR    = "checkpoints"
 LOG_DIR     = "logs"
 
-BATCH_SIZE  = 2
-ACCUM_STEPS = 2          # effective batch = 4
+BATCH_SIZE  = 4
+ACCUM_STEPS = 2          # effective batch = 8 (RTX 4070 12 GB, less peak VRAM)
 LR          = 2e-4
 BETAS       = (0.5, 0.999)
 NUM_WORKERS = 0           # Windows — no fork
-DECAY_START = 20          # epoch where LR decay begins
+DECAY_START = 50          # epoch where LR decay begins
 
 LAMBDA_L1   = 10.0
 LAMBDA_VGG  = 5.0
 LAMBDA_TV   = 1.0
+LAMBDA_GAN  = 1.0         # adversarial loss weight (Stage 2 only)
+PATIENCE    = 7           # early stopping: stop after N epochs with no improvement
+MIN_DELTA   = 1e-4        # minimum loss decrease to count as improvement
 
 CLOTH_LABELS = [4, 7, 17]  # upper-clothes, dress, scarf
 
@@ -141,6 +145,15 @@ def save_ckpt(path, model, optimizer, epoch):
                 "epoch": epoch}, path)
 
 
+def save_ckpt_gan(path, gen, disc, opt_G, opt_D, epoch):
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    torch.save({"model": gen.state_dict(),
+                "disc": disc.state_dict(),
+                "optimizer": opt_G.state_dict(),
+                "optimizer_D": opt_D.state_dict(),
+                "epoch": epoch}, path)
+
+
 def log_images(writer, tag, images, step, n=4):
     writer.add_images(tag, ((images[:n] + 1) / 2).clamp(0, 1), step)
 
@@ -154,8 +167,9 @@ def train_warp(args):
 
     print(f"Dataset: {len(dataset)} samples, {len(loader)} batches/epoch\n")
 
-    model = WarpNet().to(DEVICE)
-    vgg   = VGGLoss().to(DEVICE).eval()
+    model = WarpNet().to(DEVICE).to(memory_format=torch.channels_last)
+    model.enable_gradient_checkpointing()
+    vgg   = VGGLoss().to(DEVICE).to(memory_format=torch.channels_last).eval()
 
     opt   = torch.optim.Adam(model.parameters(), lr=args.lr, betas=BETAS)
     steps_per_epoch = max(len(loader) // args.accum, 1)
@@ -172,22 +186,26 @@ def train_warp(args):
         print(f"Resumed from epoch {ckpt['epoch']}")
 
     step = (start_epoch - 1) * len(loader)
+    best_loss = float("inf")
+    patience_counter = 0
 
     for epoch in range(start_epoch, args.epochs + 1):
         model.train()
         pbar = tqdm(loader, desc=f"[warp] E{epoch:02d}", dynamic_ncols=True)
+        epoch_loss = 0.0
+        n_batches  = 0
 
         for i, batch in enumerate(pbar):
-            ag   = batch["agnostic"].to(DEVICE)
-            cl   = batch["cloth"].to(DEVICE)
-            cm   = batch["cloth_mask"].unsqueeze(1).to(DEVICE)
-            pose = batch["pose_map"].to(DEVICE)
-            per  = batch["person"].to(DEVICE)
+            ag   = batch["agnostic"].to(DEVICE, memory_format=torch.channels_last)
+            cl   = batch["cloth"].to(DEVICE, memory_format=torch.channels_last)
+            cm   = batch["cloth_mask"].unsqueeze(1).to(DEVICE, memory_format=torch.channels_last)
+            pose = batch["pose_map"].to(DEVICE, memory_format=torch.channels_last)
+            per  = batch["person"].to(DEVICE, memory_format=torch.channels_last)
             pm   = batch["parse_map"].to(DEVICE)
 
             inp = torch.cat([ag, pose, cl, cm], 1)                # 25ch
 
-            with autocast("cuda", enabled=args.amp):
+            with autocast(enabled=args.amp):
                 flow   = model(inp)
                 warped = warp_cloth(cl, flow)
                 pcm    = person_cloth_mask(pm)
@@ -206,16 +224,28 @@ def train_warp(args):
                 opt.zero_grad(set_to_none=True)
                 sched.step()
 
+            del inp, flow, warped, pcm  # free VRAM between batches
+
             step += 1
+            batch_loss = loss.item() * args.accum
+            epoch_loss += batch_loss
+            n_batches  += 1
             pbar.set_postfix(L1=f"{l1.item():.4f}", TV=f"{tv.item():.4f}",
                              VGG=f"{vg.item():.3f}")
 
             if step % 50 == 0:
-                writer.add_scalar("warp/loss_total", loss.item() * args.accum, step)
+                writer.add_scalar("warp/loss_total", batch_loss, step)
                 writer.add_scalar("warp/l1", l1.item(), step)
                 writer.add_scalar("warp/tv", tv.item(), step)
                 writer.add_scalar("warp/vgg", vg.item(), step)
                 writer.add_scalar("warp/lr", sched.get_last_lr()[0], step)
+
+        # ── Epoch stats ───────────────────────────────────────────────────────
+        if DEVICE == "cuda":
+            torch.cuda.empty_cache()
+        avg_loss = epoch_loss / max(n_batches, 1)
+        writer.add_scalar("warp/epoch_loss", avg_loss, epoch)
+        print(f"  Epoch {epoch:02d} avg loss: {avg_loss:.4f}")
 
         # Checkpoint every 5 epochs + final
         if epoch % 5 == 0 or epoch == args.epochs:
@@ -226,11 +256,25 @@ def train_warp(args):
                 log_images(writer, "warp/target", per * pcm, step)
             print(f"  -> Checkpoint saved: warp_epoch_{epoch:03d}.pth")
 
+        # ── Early stopping ────────────────────────────────────────────────────
+        if avg_loss < best_loss - MIN_DELTA:
+            best_loss = avg_loss
+            patience_counter = 0
+            save_ckpt(f"{CKPT_DIR}/warp_best.pth", model, opt, epoch)
+        else:
+            patience_counter += 1
+            print(f"  No improvement for {patience_counter}/{args.patience} epochs")
+
+        if patience_counter >= args.patience:
+            print(f"\n  Early stopping at epoch {epoch} (best loss: {best_loss:.4f})")
+            save_ckpt(f"{CKPT_DIR}/warp_epoch_{epoch:03d}.pth", model, opt, epoch)
+            break
+
     writer.close()
-    print("\nWarpNet training complete!")
+    print(f"\nWarpNet training complete! Best loss: {best_loss:.4f}")
 
 
-# ── Stage 2: TryOnNet ──────────────────────────────────────────────────────────
+# ── Stage 2: TryOnNet + PatchGAN ──────────────────────────────────────────────
 
 def train_tryon(args):
     dataset = VITONDataset(args.data)
@@ -240,7 +284,7 @@ def train_tryon(args):
     print(f"Dataset: {len(dataset)} samples, {len(loader)} batches/epoch\n")
 
     # Frozen WarpNet
-    warp = WarpNet().to(DEVICE).eval()
+    warp = WarpNet().to(DEVICE).to(memory_format=torch.channels_last).eval()
     if args.warp_ckpt:
         warp.load_state_dict(
             torch.load(args.warp_ckpt, map_location=DEVICE, weights_only=False)["model"]
@@ -251,77 +295,149 @@ def train_tryon(args):
     for p in warp.parameters():
         p.requires_grad = False
 
-    model = TryOnNet().to(DEVICE)
-    vgg   = VGGLoss().to(DEVICE).eval()
+    # Generator + Discriminator
+    gen  = TryOnNet().to(DEVICE).to(memory_format=torch.channels_last)
+    gen.enable_gradient_checkpointing()
+    disc = PatchDiscriminator().to(DEVICE).to(memory_format=torch.channels_last)
+    vgg  = VGGLoss().to(DEVICE).to(memory_format=torch.channels_last).eval()
 
-    opt   = torch.optim.Adam(model.parameters(), lr=args.lr, betas=BETAS)
+    opt_G = torch.optim.Adam(gen.parameters(),  lr=args.lr, betas=BETAS)
+    opt_D = torch.optim.Adam(disc.parameters(), lr=args.lr, betas=BETAS)
+
     steps_per_epoch = max(len(loader) // args.accum, 1)
-    sched = make_scheduler(opt, args.epochs, args.decay_start, steps_per_epoch)
-    scaler = GradScaler(enabled=args.amp)
-    writer = SummaryWriter(os.path.join(LOG_DIR, "tryon"))
+    sched_G = make_scheduler(opt_G, args.epochs, args.decay_start, steps_per_epoch)
+    sched_D = make_scheduler(opt_D, args.epochs, args.decay_start, steps_per_epoch)
+    scaler  = GradScaler(enabled=args.amp)
+    writer  = SummaryWriter(os.path.join(LOG_DIR, "tryon"))
 
     start_epoch = 1
     if args.resume:
         ckpt = torch.load(args.resume, map_location=DEVICE, weights_only=False)
-        model.load_state_dict(ckpt["model"])
-        opt.load_state_dict(ckpt["optimizer"])
+        gen.load_state_dict(ckpt["model"])
+        opt_G.load_state_dict(ckpt["optimizer"])
+        if "disc" in ckpt:
+            disc.load_state_dict(ckpt["disc"])
+        if "optimizer_D" in ckpt:
+            opt_D.load_state_dict(ckpt["optimizer_D"])
         start_epoch = ckpt["epoch"] + 1
         print(f"Resumed from epoch {ckpt['epoch']}")
 
     step = (start_epoch - 1) * len(loader)
+    best_loss = float("inf")
+    patience_counter = 0
 
     for epoch in range(start_epoch, args.epochs + 1):
-        model.train()
+        gen.train()
+        disc.train()
         pbar = tqdm(loader, desc=f"[tryon] E{epoch:02d}", dynamic_ncols=True)
+        epoch_g_loss = 0.0
+        n_batches    = 0
 
         for i, batch in enumerate(pbar):
-            ag   = batch["agnostic"].to(DEVICE)
-            cl   = batch["cloth"].to(DEVICE)
-            cm   = batch["cloth_mask"].unsqueeze(1).to(DEVICE)
-            pose = batch["pose_map"].to(DEVICE)
-            per  = batch["person"].to(DEVICE)
+            ag   = batch["agnostic"].to(DEVICE, memory_format=torch.channels_last)
+            cl   = batch["cloth"].to(DEVICE, memory_format=torch.channels_last)
+            cm   = batch["cloth_mask"].unsqueeze(1).to(DEVICE, memory_format=torch.channels_last)
+            pose = batch["pose_map"].to(DEVICE, memory_format=torch.channels_last)
+            per  = batch["person"].to(DEVICE, memory_format=torch.channels_last)
+            pm   = batch["parse_map"].to(DEVICE)
 
+            # Warp cloth (frozen)
             with torch.no_grad():
-                warp_in = torch.cat([ag, pose, cl, cm], 1)
-                flow    = warp(warp_in)
-                warped  = warp_cloth(cl, flow)
+                warp_in     = torch.cat([ag, pose, cl, cm], 1)
+                flow        = warp(warp_in)
+                warped      = warp_cloth(cl, flow)
+                warped_mask = warp_cloth(cm, flow)
+                parse_oh    = F.one_hot(pm.long(), 18).permute(0, 3, 1, 2).float()
+                del warp_in, flow  # free intermediate warp tensors
 
-            inp = torch.cat([ag, warped, pose], 1)                # 24ch
+            # Assemble 43ch input
+            inp = torch.cat([ag, warped, warped_mask, pose, parse_oh], 1)
+            del parse_oh  # no longer needed
 
-            with autocast("cuda", enabled=args.amp):
-                out = model(inp)
-                l1  = F.l1_loss(out, per)
-                vg  = vgg(out, per)
-                loss = (LAMBDA_L1 * l1 + LAMBDA_VGG * vg) / args.accum
+            # ── Train Discriminator ───────────────────────────────────────────
+            with autocast(enabled=args.amp):
+                fake = gen(inp)
+                d_real = disc(per)
+                d_fake = disc(fake.detach())
+                d_loss = 0.5 * (
+                    F.mse_loss(d_real, torch.ones_like(d_real)) +
+                    F.mse_loss(d_fake, torch.zeros_like(d_fake))
+                )
 
-            scaler.scale(loss).backward()
+            opt_D.zero_grad(set_to_none=True)
+            scaler.scale(d_loss).backward()
+            scaler.step(opt_D)
+            scaler.update()
+            sched_D.step()
+            del d_real, d_fake  # free D intermediates
 
-            if (i + 1) % args.accum == 0 or (i + 1) == len(loader):
-                scaler.step(opt)
-                scaler.update()
-                opt.zero_grad(set_to_none=True)
-                sched.step()
+            # ── Train Generator ───────────────────────────────────────────────
+            with autocast(enabled=args.amp):
+                d_fake_for_g = disc(fake)
+                g_gan = F.mse_loss(d_fake_for_g, torch.ones_like(d_fake_for_g))
+                g_l1  = F.l1_loss(fake, per)
+                g_vgg = vgg(fake, per)
+                g_loss = LAMBDA_L1 * g_l1 + LAMBDA_VGG * g_vgg + LAMBDA_GAN * g_gan
+
+            opt_G.zero_grad(set_to_none=True)
+            scaler.scale(g_loss).backward()
+            scaler.step(opt_G)
+            scaler.update()
+            sched_G.step()
+            del fake, inp, d_fake_for_g  # free G intermediates
 
             step += 1
-            pbar.set_postfix(L1=f"{l1.item():.4f}", VGG=f"{vg.item():.3f}")
+            g_total = g_loss.item()
+            epoch_g_loss += g_total
+            n_batches    += 1
+            pbar.set_postfix(
+                G=f"{g_total:.3f}", D=f"{d_loss.item():.3f}",
+                L1=f"{g_l1.item():.4f}", VGG=f"{g_vgg.item():.3f}",
+            )
 
             if step % 50 == 0:
-                writer.add_scalar("tryon/loss_total", loss.item() * args.accum, step)
-                writer.add_scalar("tryon/l1", l1.item(), step)
-                writer.add_scalar("tryon/vgg", vg.item(), step)
-                writer.add_scalar("tryon/lr", sched.get_last_lr()[0], step)
+                writer.add_scalar("tryon/g_total", g_total, step)
+                writer.add_scalar("tryon/g_l1", g_l1.item(), step)
+                writer.add_scalar("tryon/g_vgg", g_vgg.item(), step)
+                writer.add_scalar("tryon/g_gan", g_gan.item(), step)
+                writer.add_scalar("tryon/d_loss", d_loss.item(), step)
+                writer.add_scalar("tryon/lr", sched_G.get_last_lr()[0], step)
+
+        # ── Epoch stats ───────────────────────────────────────────────────────
+        if DEVICE == "cuda":
+            torch.cuda.empty_cache()
+        avg_loss = epoch_g_loss / max(n_batches, 1)
+        writer.add_scalar("tryon/epoch_g_loss", avg_loss, epoch)
+        print(f"  Epoch {epoch:02d} avg G loss: {avg_loss:.4f}")
 
         if epoch % 5 == 0 or epoch == args.epochs:
-            save_ckpt(f"{CKPT_DIR}/tryon_epoch_{epoch:03d}.pth", model, opt, epoch)
+            save_ckpt_gan(f"{CKPT_DIR}/tryon_epoch_{epoch:03d}.pth",
+                          gen, disc, opt_G, opt_D, epoch)
             with torch.no_grad():
-                log_images(writer, "tryon/output",   out, step)
+                log_images(writer, "tryon/output",   fake, step)
                 log_images(writer, "tryon/person",   per, step)
                 log_images(writer, "tryon/warped",   warped, step)
                 log_images(writer, "tryon/agnostic", ag, step)
             print(f"  -> Checkpoint saved: tryon_epoch_{epoch:03d}.pth")
 
+        # ── Early stopping ────────────────────────────────────────────────────
+        if avg_loss < best_loss - MIN_DELTA:
+            best_loss = avg_loss
+            patience_counter = 0
+            save_ckpt_gan(f"{CKPT_DIR}/tryon_best.pth",
+                          gen, disc, opt_G, opt_D, epoch)
+        else:
+            patience_counter += 1
+            print(f"  No improvement for {patience_counter}/{args.patience} epochs")
+
+        if patience_counter >= args.patience:
+            print(f"\n  Early stopping at epoch {epoch} (best G loss: {best_loss:.4f})")
+            save_ckpt_gan(f"{CKPT_DIR}/tryon_epoch_{epoch:03d}.pth",
+                          gen, disc, opt_G, opt_D, epoch)
+            break
+
     writer.close()
-    print("\nTryOnNet training complete!")
+    print(f"\nTryOnNet training complete! Best G loss: {best_loss:.4f}")
 
 
 # ── CLI ─────────────────────────────────────────────────────────────────────────
@@ -332,7 +448,9 @@ def main():
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     p.add_argument("--stage",       required=True, choices=["warp", "tryon"])
-    p.add_argument("--epochs",      type=int, default=30)
+    p.add_argument("--epochs",      type=int, default=200)
+    p.add_argument("--patience",    type=int, default=PATIENCE,
+                   help="Early stopping patience (epochs with no improvement)")
     p.add_argument("--batch",       type=int, default=BATCH_SIZE)
     p.add_argument("--accum",       type=int, default=ACCUM_STEPS)
     p.add_argument("--lr",          type=float, default=LR)
@@ -356,6 +474,7 @@ def main():
     print(f"  Batch  : {args.batch} x {args.accum} accum = {args.batch * args.accum} effective")
     print(f"  AMP    : {args.amp}")
     print(f"  Epochs : {args.epochs} (decay from epoch {args.decay_start})")
+    print(f"  Early stop: patience={args.patience}, min_delta={MIN_DELTA}")
     print(f"{'='*50}\n")
 
     if args.stage == "warp":

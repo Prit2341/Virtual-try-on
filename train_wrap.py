@@ -14,9 +14,9 @@ DATA_PATH = "dataset/train/tensors"
 CHECKPOINT_DIR = "checkpoints"
 LOG_DIR = "logs/warp"
 
-BATCH_SIZE = 4
+BATCH_SIZE = 12
 EPOCHS = 30
-LR = 1e-4
+LR = 2e-4
 
 
 class TensorDataset(Dataset):
