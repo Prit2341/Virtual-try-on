@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(find c:/Virtual_try_on -name *.zip -o -name *.tar* -o -name *.7z)",
+      "Bash(./venv/Scripts/python.exe -c \":*)",
+      "Bash(python -c \"from PIL import Image; print\\(''PIL ok''\\)\")",
+      "Bash(pip install:*)",
+      "Bash(python -c \":*)",
+      "Bash(nvidia-smi --query-gpu=name,memory.total --format=csv,noheader)"
+    ]
+  }
+}

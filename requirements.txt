@@ -1,0 +1,22 @@
+# VITON-HD — Python 3.12 | RTX 4000 Ada (20 GB) | CUDA 12.8
+#
+# Install:
+#   pip install -r requirements.txt
+
+--extra-index-url https://download.pytorch.org/whl/cu128
+
+# ── Core ──────────────────────────────────────────────────────────────────────
+torch==2.7.1+cu128
+torchvision==0.22.1+cu128
+numpy==2.2.4
+
+# ── Image I/O ─────────────────────────────────────────────────────────────────
+opencv-python==4.11.0.86
+Pillow==11.2.1
+
+# ── Utils ─────────────────────────────────────────────────────────────────────
+tqdm==4.67.1
+matplotlib==3.10.1
+
+# ── Training / Logging ────────────────────────────────────────────────────────
+tensorboard==2.19.0
