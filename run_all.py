@@ -13,6 +13,7 @@ Usage:
 """
 
 import argparse
+import os
 import subprocess
 import sys
 import time
@@ -77,13 +78,15 @@ MODELS = {
 
 # Optimal batch sizes from find_optimal_batch.py (RTX 4000 Ada 20 GB, AMP fp16)
 BATCH_SIZES = {
-    "baseline":      128,
-    "v2":             64,
-    "resnet_gen":     64,
-    "attention_unet": 128,
-    "single_stage":   192,
-    "spade":           80,
-    "multiscale":     192,
+    # Conservative values — benchmark was L1-only, real training adds VGG overhead.
+    # All tested at ≤75% VRAM to leave room for VGG activations during backward pass.
+    "baseline":      112,  # benchmark 128=46.4% → +VGG fits well under 85%
+    "v2":             48,  # benchmark 48=51.8%;  next step (64) OOMed with VGG
+    "resnet_gen":     48,  # same architecture as v2 warp stage
+    "attention_unet":112,  # same model size as baseline
+    "single_stage":  192,  # lightest model — benchmark 192=49.3%
+    "spade":          64,  # benchmark 64=53.1%
+    "multiscale":    160,  # benchmark 160=45.2%
 }
 
 # ---------------------------------------------------------------------------
@@ -122,7 +125,9 @@ def run_model(model_key: str, extra_args: list, dry_run: bool) -> bool:
 
     t0 = time.perf_counter()
     try:
-        result = subprocess.run(cmd, cwd=ROOT)
+        env = os.environ.copy()
+        env["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
+        result = subprocess.run(cmd, cwd=ROOT, env=env)
         elapsed = time.perf_counter() - t0
         if result.returncode == 0:
             print(f"\n  DONE in {fmt_duration(elapsed)}")
@@ -148,13 +153,17 @@ def main():
                    help="Retrain even if checkpoint already exists")
     p.add_argument("--dry-run",  action="store_true",
                    help="Print commands without executing")
-    p.add_argument("--epochs",   type=int, default=None,
+    p.add_argument("--epochs",      type=int, default=None,
                    help="Override epoch count for all models")
+    p.add_argument("--max-samples", type=int, default=None,
+                   help="Limit dataset size (e.g. 3000 for quick runs)")
     args = p.parse_args()
 
     extra = []
     if args.epochs:
         extra += ["--epochs", str(args.epochs)]
+    if args.max_samples:
+        extra += ["--max-samples", str(args.max_samples)]
 
     print(f"\nVirtual Try-On — Training Pipeline")
     print(f"Started : {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")

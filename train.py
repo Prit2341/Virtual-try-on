@@ -39,7 +39,7 @@ from model.warp_model import WarpNet
 from model.tryon_model import TryOnNet
 from model.discriminator import PatchDiscriminator
 from model.warp_utils import warp_cloth
-from shared.dataset import FastVITONLoader
+from shared.dataset import make_loader
 from shared.metrics import ssim_metric, psnr_metric, metrics_header, metrics_separator, metrics_row
 
 # ── Defaults ───────────────────────────────────────────────────────────────────
@@ -376,8 +376,7 @@ def fmt_time(seconds: float) -> str:
 # ── Stage 1: WarpNet ──────────────────────────────────────────────────────────
 
 def train_warp(args, logger: logging.Logger):
-    loader = FastVITONLoader(args.data, batch_size=args.batch,
-                             device=DEVICE, max_samples=args.max_samples)
+    loader = make_loader(args.data, args.batch, max_samples=args.max_samples)
 
     # ── Config log ────────────────────────────────────────────────────────────
     log_section(logger, "WARPNET TRAINING  —  CONFIGURATION")
@@ -386,7 +385,7 @@ def train_warp(args, logger: logging.Logger):
     if DEVICE == "cuda":
         logger.info(f"  GPU            : {torch.cuda.get_device_name(0)}")
         logger.info(f"  VRAM           : {torch.cuda.get_device_properties(0).total_memory/1e9:.1f} GB")
-    logger.info(f"  Dataset        : {loader.n_samples} samples  ({args.data})")
+    logger.info(f"  Dataset        : {len(loader.dataset)} samples  ({args.data})")
     logger.info(f"  Batches/epoch  : {len(loader)}")
     logger.info(f"  Batch size     : {args.batch}")
     logger.info(f"  Learning rate  : {args.lr}")
@@ -448,6 +447,7 @@ def train_warp(args, logger: logging.Logger):
         epoch_start = time.time()
 
         for i, batch in enumerate(pbar):
+            batch = {k: v.to(DEVICE, non_blocking=True) for k, v in batch.items()}
             ag   = batch["agnostic"]
             cl   = batch["cloth"]
             cm   = batch["cloth_mask"].unsqueeze(1)
@@ -565,8 +565,7 @@ def train_warp(args, logger: logging.Logger):
 # ── Stage 2: TryOnNet ─────────────────────────────────────────────────────────
 
 def train_tryon(args, logger: logging.Logger):
-    loader = FastVITONLoader(args.data, batch_size=args.batch,
-                             device=DEVICE, max_samples=args.max_samples)
+    loader = make_loader(args.data, args.batch, max_samples=args.max_samples)
 
     # ── Config log ────────────────────────────────────────────────────────────
     log_section(logger, "TRYONNET TRAINING  —  CONFIGURATION")
@@ -575,7 +574,7 @@ def train_tryon(args, logger: logging.Logger):
     if DEVICE == "cuda":
         logger.info(f"  GPU            : {torch.cuda.get_device_name(0)}")
         logger.info(f"  VRAM           : {torch.cuda.get_device_properties(0).total_memory/1e9:.1f} GB")
-    logger.info(f"  Dataset        : {loader.n_samples} samples  ({args.data})")
+    logger.info(f"  Dataset        : {len(loader.dataset)} samples  ({args.data})")
     logger.info(f"  Batches/epoch  : {len(loader)}")
     logger.info(f"  Batch size     : {args.batch}")
     logger.info(f"  Learning rate  : {args.lr}")
@@ -654,6 +653,7 @@ def train_tryon(args, logger: logging.Logger):
         epoch_start = time.time()
 
         for i, batch in enumerate(pbar):
+            batch = {k: v.to(DEVICE, non_blocking=True) for k, v in batch.items()}
             ag   = batch["agnostic"]
             cl   = batch["cloth"]
             cm   = batch["cloth_mask"].unsqueeze(1)
@@ -815,7 +815,7 @@ def main():
     p.add_argument("--lambda-gan",    type=float, default=None, dest="lambda_gan")
     args = p.parse_args()
     if torch.cuda.is_available():
-        torch.cuda.set_per_process_memory_fraction(0.80)  # hard cap: OOM before CPU spillage
+        torch.cuda.set_per_process_memory_fraction(0.85)  # hard cap: OOM before CPU spillage
 
     # ── Load variant config and apply defaults ────────────────────────────────
     if args.ngf           is None: args.ngf           = 64

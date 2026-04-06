@@ -34,7 +34,7 @@ from tqdm import tqdm
 
 from model.gmm_model import GMMNet
 from model.tryon_model_v2 import TryOnNetV2
-from shared.dataset import FastVITONLoader
+from shared.dataset import make_loader
 from shared.metrics import ssim_metric, psnr_metric, metrics_header, metrics_separator, metrics_row
 
 # ── Defaults ───────────────────────────────────────────────────────────────────
@@ -190,7 +190,9 @@ def cleanup_old_checkpoints(stage, keep=2):
 
 
 def check_disk_space():
-    free_gb = shutil.disk_usage(CKPT_DIR).free / 1e9
+    # Use ROOT dir as fallback if CKPT_DIR doesn't exist yet
+    check_path = CKPT_DIR if os.path.exists(CKPT_DIR) else str(_BASE)
+    free_gb = shutil.disk_usage(check_path).free / 1e9
     if free_gb < 0.5:
         print(f"\n  !! WARNING: Only {free_gb:.2f} GB free on disk !!\n")
     return free_gb
@@ -220,15 +222,14 @@ def fmt_time(seconds):
 # ── Stage 1: GMM Training ────────────────────────────────────────────────────
 
 def train_gmm(args, logger):
-    loader = FastVITONLoader(args.data, batch_size=args.batch,
-                             device=DEVICE, max_samples=args.max_samples)
+    loader = make_loader(args.data, args.batch, max_samples=args.max_samples)
 
     log_section(logger, "GMM TRAINING (V2)  —  CONFIGURATION")
     logger.info(f"  Device         : {DEVICE}")
     if DEVICE == "cuda":
         logger.info(f"  GPU            : {torch.cuda.get_device_name(0)}")
         logger.info(f"  VRAM           : {torch.cuda.get_device_properties(0).total_memory/1e9:.1f} GB")
-    logger.info(f"  Dataset        : {loader.n_samples} samples")
+    logger.info(f"  Dataset        : {len(loader.dataset)} samples")
     logger.info(f"  Batches/epoch  : {len(loader)}")
     logger.info(f"  Batch size     : {args.batch}")
     logger.info(f"  Learning rate  : {args.lr}")
@@ -278,6 +279,7 @@ def train_gmm(args, logger):
         epoch_start = time.time()
 
         for batch in pbar:
+            batch = {k: v.to(DEVICE, non_blocking=True) for k, v in batch.items()}
             ag   = batch["agnostic"]
             cl   = batch["cloth"]
             cm   = batch["cloth_mask"].unsqueeze(1)
@@ -381,14 +383,13 @@ def train_gmm(args, logger):
 # ── Stage 2: TryOnNet V2 Training ────────────────────────────────────────────
 
 def train_tryon(args, logger):
-    loader = FastVITONLoader(args.data, batch_size=args.batch,
-                             device=DEVICE, max_samples=args.max_samples)
+    loader = make_loader(args.data, args.batch, max_samples=args.max_samples)
 
     log_section(logger, "TRYONNET V2 TRAINING  —  CONFIGURATION")
     logger.info(f"  Device         : {DEVICE}")
     if DEVICE == "cuda":
         logger.info(f"  GPU            : {torch.cuda.get_device_name(0)}")
-    logger.info(f"  Dataset        : {loader.n_samples} samples")
+    logger.info(f"  Dataset        : {len(loader.dataset)} samples")
     logger.info(f"  Batch size     : {args.batch}")
     logger.info(f"  Learning rate  : {args.lr}")
     logger.info(f"  Lambda L1      : {LAMBDA_L1_TRYON}")
@@ -445,6 +446,7 @@ def train_tryon(args, logger):
         epoch_start = time.time()
 
         for batch in pbar:
+            batch = {k: v.to(DEVICE, non_blocking=True) for k, v in batch.items()}
             ag   = batch["agnostic"]
             cl   = batch["cloth"]
             cm   = batch["cloth_mask"].unsqueeze(1)
@@ -568,7 +570,7 @@ def main():
     p.add_argument("--max-samples", type=int, default=None, dest="max_samples")
     args = p.parse_args()
     if torch.cuda.is_available():
-        torch.cuda.set_per_process_memory_fraction(0.80)  # hard cap: OOM before CPU spillage
+        torch.cuda.set_per_process_memory_fraction(0.85)  # hard cap: OOM before CPU spillage
 
     if args.stage == "both":
         logger = setup_logger("gmm")

@@ -26,7 +26,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.amp import autocast, GradScaler
 from models.multiscale.network import CoarseNet, RefineNet
-from shared.dataset import FastVITONLoader
+from shared.dataset import make_loader
 from shared.losses import VGGLoss
 from shared.metrics import ssim_metric, psnr_metric
 
@@ -92,8 +92,8 @@ def train_coarse(args, logger: logging.Logger) -> None:
     ckpt_dir = Path(args.ckpt_dir)
     ckpt_dir.mkdir(parents=True, exist_ok=True)
 
-    loader = FastVITONLoader(args.data, batch_size=args.batch, device=DEVICE)
-    logger.info(f"[coarse] dataset: {loader.n_samples} samples  batch={args.batch}")
+    loader = make_loader(args.data, args.batch, max_samples=args.max_samples)
+    logger.info(f"[coarse] dataset: {len(loader.dataset)} samples  batch={args.batch}")
 
     model  = CoarseNet(ngf=32).to(DEVICE)
     opt    = torch.optim.Adam(model.parameters(), lr=args.lr, betas=(0.5, 0.999))
@@ -111,6 +111,7 @@ def train_coarse(args, logger: logging.Logger) -> None:
         t0 = time.time()
 
         for batch in loader:
+            batch = {k: v.to(DEVICE, non_blocking=True) for k, v in batch.items()}
             ag, cl, cm, pose, person = _unpack_batch(batch)
 
             # Downsample everything to coarse resolution
@@ -171,8 +172,8 @@ def train_refine(args, logger: logging.Logger) -> None:
     ckpt_dir = Path(args.ckpt_dir)
     ckpt_dir.mkdir(parents=True, exist_ok=True)
 
-    loader = FastVITONLoader(args.data, batch_size=args.batch, device=DEVICE)
-    logger.info(f"[refine] dataset: {loader.n_samples} samples  batch={args.batch}")
+    loader = make_loader(args.data, args.batch, max_samples=args.max_samples)
+    logger.info(f"[refine] dataset: {len(loader.dataset)} samples  batch={args.batch}")
 
     # Load frozen CoarseNet
     coarse_net  = CoarseNet(ngf=32).to(DEVICE)
@@ -203,6 +204,7 @@ def train_refine(args, logger: logging.Logger) -> None:
         t0 = time.time()
 
         for batch in loader:
+            batch = {k: v.to(DEVICE, non_blocking=True) for k, v in batch.items()}
             ag, cl, cm, pose, person = _unpack_batch(batch)
 
             with torch.no_grad():
@@ -276,7 +278,9 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--batch",    type=int, default=192)
     p.add_argument("--lr",       type=float, default=2e-4)
     p.add_argument("--patience", type=int, default=20)
-    p.add_argument("--stage",    choices=["coarse", "refine", "both"], default="both")
+    p.add_argument("--stage",       choices=["coarse", "refine", "both"], default="both")
+    p.add_argument("--max-samples", type=int, default=None, dest="max_samples",
+                   help="Limit dataset size (e.g. 5000)")
     p.add_argument("--ckpt-dir", default=str(ROOT / "checkpoints" / "multiscale"),
                    dest="ckpt_dir")
     p.add_argument("--log-dir",  default=str(ROOT / "logs" / "multiscale"),
@@ -287,7 +291,7 @@ def parse_args() -> argparse.Namespace:
 def main() -> None:
     args = parse_args()
     if DEVICE == "cuda":
-        torch.cuda.set_per_process_memory_fraction(0.80)  # hard cap: OOM before CPU spillage
+        torch.cuda.set_per_process_memory_fraction(0.85)  # hard cap: OOM before CPU spillage
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     log_path  = Path(args.log_dir) / f"train_{timestamp}.txt"
     logger    = _setup_logger(log_path)

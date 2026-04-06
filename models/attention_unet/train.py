@@ -23,7 +23,7 @@ import torch.nn as nn
 from torch.amp import autocast, GradScaler
 from model.warp_utils import warp_cloth
 from models.attention_unet.network import AttentionWarpNet, AttentionTryOnNet
-from shared.dataset import FastVITONLoader
+from shared.dataset import make_loader
 from shared.losses import VGGLoss, smooth_loss, person_cloth_mask
 from shared.metrics import ssim_metric, psnr_metric
 
@@ -79,8 +79,8 @@ def train_warp(args, logger: logging.Logger) -> None:
     ckpt_dir = Path(args.ckpt_dir)
     ckpt_dir.mkdir(parents=True, exist_ok=True)
 
-    loader = FastVITONLoader(args.data, batch_size=args.batch, device=DEVICE)
-    logger.info(f"[warp] dataset: {loader.n_samples} samples  batch={args.batch}")
+    loader = make_loader(args.data, args.batch, max_samples=args.max_samples)
+    logger.info(f"[warp] dataset: {len(loader.dataset)} samples  batch={args.batch}")
 
     model  = AttentionWarpNet(in_channels=25, ngf=64, flow_scale=0.8).to(DEVICE)
     opt    = torch.optim.Adam(model.parameters(), lr=args.lr, betas=(0.5, 0.999))
@@ -98,6 +98,7 @@ def train_warp(args, logger: logging.Logger) -> None:
         t0 = time.time()
 
         for batch in loader:
+            batch = {k: v.to(DEVICE, non_blocking=True) for k, v in batch.items()}
             ag, cl, cm, pose, person, pm = _unpack_batch(batch)
             warp_inp = torch.cat([ag, pose, cl, cm], dim=1)
             pcm = person_cloth_mask(pm)
@@ -157,8 +158,8 @@ def train_tryon(args, logger: logging.Logger) -> None:
     ckpt_dir = Path(args.ckpt_dir)
     ckpt_dir.mkdir(parents=True, exist_ok=True)
 
-    loader = FastVITONLoader(args.data, batch_size=args.batch, device=DEVICE)
-    logger.info(f"[tryon] dataset: {loader.n_samples} samples  batch={args.batch}")
+    loader = make_loader(args.data, args.batch, max_samples=args.max_samples)
+    logger.info(f"[tryon] dataset: {len(loader.dataset)} samples  batch={args.batch}")
 
     warp_net  = AttentionWarpNet(in_channels=25, ngf=64, flow_scale=0.8).to(DEVICE)
     warp_best = ckpt_dir / "warp_best.pth"
@@ -188,6 +189,7 @@ def train_tryon(args, logger: logging.Logger) -> None:
         t0 = time.time()
 
         for batch in loader:
+            batch = {k: v.to(DEVICE, non_blocking=True) for k, v in batch.items()}
             ag, cl, cm, pose, person, pm = _unpack_batch(batch)
 
             with torch.no_grad():
@@ -252,7 +254,9 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--batch",    type=int, default=128)
     p.add_argument("--lr",       type=float, default=2e-4)
     p.add_argument("--patience", type=int, default=20)
-    p.add_argument("--stage",    choices=["warp", "tryon", "both"], default="both")
+    p.add_argument("--stage",       choices=["warp", "tryon", "both"], default="both")
+    p.add_argument("--max-samples", type=int, default=None, dest="max_samples",
+                   help="Limit dataset size (e.g. 5000)")
     p.add_argument("--ckpt-dir", default=str(ROOT / "checkpoints" / "attention_unet"),
                    dest="ckpt_dir")
     p.add_argument("--log-dir",  default=str(ROOT / "logs" / "attention_unet"),
@@ -263,7 +267,7 @@ def parse_args() -> argparse.Namespace:
 def main() -> None:
     args = parse_args()
     if DEVICE == "cuda":
-        torch.cuda.set_per_process_memory_fraction(0.80)  # hard cap: OOM before CPU spillage
+        torch.cuda.set_per_process_memory_fraction(0.85)  # hard cap: OOM before CPU spillage
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     log_path  = Path(args.log_dir) / f"train_{timestamp}.txt"
     logger    = _setup_logger(log_path)

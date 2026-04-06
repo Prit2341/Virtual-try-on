@@ -222,9 +222,9 @@ def benchmark_model(name, builder, batch_sizes, use_amp):
     results   = []
     prev_ms   = None   # ms/sample of previous batch (spillage detection)
     total_mb  = mb(vram_total())
-    # Hard limit: never attempt a batch if reserved VRAM is already >75%
-    # after the previous run (caching allocator retains pages between iters)
-    VRAM_HARD_LIMIT = 0.75
+    # Hard limit: never attempt a batch if reserved VRAM is already >85%
+    # Target: 16-17 GB on 20 GB card (80-85%), leaving 3-4 GB headroom
+    VRAM_HARD_LIMIT = 0.85
 
     for bs in batch_sizes:
         # Pre-check: if VRAM is already heavily reserved from previous iter,
@@ -255,7 +255,7 @@ def benchmark_model(name, builder, batch_sizes, use_amp):
             if DEVICE == "cuda":
                 post_warmup_pct = torch.cuda.memory_reserved() / vram_total()
                 if post_warmup_pct > VRAM_HARD_LIMIT:
-                    print(f"  batch={bs:4d}  STOPPED after warmup — reserved {post_warmup_pct*100:.1f}% VRAM (would spill)")
+                    print(f"  batch={bs:4d}  STOPPED after warmup — reserved {post_warmup_pct*100:.1f}% VRAM (>{VRAM_HARD_LIMIT*100:.0f}%)")
                     del forward_fn, opt, data, loss
                     clear()
                     break
@@ -293,8 +293,8 @@ def benchmark_model(name, builder, batch_sizes, use_amp):
             #    to batch size) — sudden slowdown = driver paging to CPU RAM
             # 3. CPU RAM grew by >200 MB during the GPU pass
             spill_flags = []
-            if peak_res > total_mb * 0.75:
-                spill_flags.append("VRAM>75%")
+            if peak_res > total_mb * 0.85:
+                spill_flags.append("VRAM>85%")
             if prev_ms is not None and ms_per > prev_ms * 1.4:
                 spill_flags.append(f"SLOW({ms_per:.1f}vs{prev_ms:.1f}ms)")
             if _PSUTIL and cpu_delta > 200:
@@ -302,8 +302,8 @@ def benchmark_model(name, builder, batch_sizes, use_amp):
 
             if spill_flags:
                 status = "SPILL? " + " ".join(spill_flags)
-            elif pct_res > 85:
-                status = "HIGH (>85%)"
+            elif pct_res > 82:
+                status = "HIGH (16-17GB)"
             else:
                 status = "OK"
 
@@ -337,7 +337,7 @@ def benchmark_model(name, builder, batch_sizes, use_amp):
 
     # Find recommendation — last batch with status OK and reserved <85%
     safe = [(bs, res, ms, pct) for bs, res, alloc, ms, pct, st in results
-            if st == "OK" and pct is not None and pct <= 85]
+            if st == "OK" and pct is not None and pct <= 82]
     ok   = [(bs, res, ms, pct) for bs, res, alloc, ms, pct, st in results
             if pct is not None and st not in ("OOM",) and not st.startswith("ERROR")]
 
@@ -358,9 +358,9 @@ def main():
     p = argparse.ArgumentParser(description="Find optimal training batch size per model")
     p.add_argument("--models",    nargs="+", default=list(MODELS.keys()),
                    choices=list(MODELS.keys()), help="Models to test")
-    p.add_argument("--max-batch", type=int, default=64,   help="Max batch size to try")
-    p.add_argument("--start",     type=int, default=8,    help="Starting batch size")
-    p.add_argument("--step",      type=int, default=8,    help="Batch size increment")
+    p.add_argument("--max-batch", type=int, default=256,  help="Max batch size to try")
+    p.add_argument("--start",     type=int, default=16,   help="Starting batch size")
+    p.add_argument("--step",      type=int, default=16,   help="Batch size increment")
     p.add_argument("--no-amp",    action="store_true",    help="Disable AMP (fp16)")
     args = p.parse_args()
 
@@ -395,7 +395,7 @@ def main():
 
     for name, results in all_results.items():
         safe = [(bs, res, ms, pct) for bs, res, alloc, ms, pct, st in results
-                if st == "OK" and pct is not None and pct <= 85]
+                if st == "OK" and pct is not None and pct <= 82]
         ok   = [(bs, res, ms, pct) for bs, res, alloc, ms, pct, st in results
                 if pct is not None and st not in ("OOM",) and not st.startswith("ERROR")]
         if safe:

@@ -4,7 +4,7 @@ import threading
 from concurrent.futures import ThreadPoolExecutor
 
 import torch
-from torch.utils.data import Dataset
+from torch.utils.data import Dataset, DataLoader
 from tqdm import tqdm
 
 
@@ -35,6 +35,24 @@ class VITONDataset(Dataset):
 
 
 TENSOR_KEYS = ["person", "cloth", "agnostic", "pose_map", "cloth_mask", "parse_map"]
+
+
+def make_loader(root, batch_size, max_samples=None, shuffle=True, num_workers=4):
+    """Standard PyTorch DataLoader over VITONDataset (no caching, no custom threads).
+
+    Returns batches as CPU tensors — caller must move to device with
+    batch = {k: v.to(device, non_blocking=True) for k, v in batch.items()}
+    """
+    dataset = VITONDataset(root, max_samples=max_samples, cache_in_ram=False)
+    return DataLoader(
+        dataset,
+        batch_size=batch_size,
+        shuffle=shuffle,
+        num_workers=num_workers,
+        pin_memory=True,
+        drop_last=True,
+        persistent_workers=(num_workers > 0),
+    )
 
 
 def _load_one(path):
@@ -76,7 +94,7 @@ class FastVITONLoader:
     """
 
     def __init__(self, root, batch_size, device="cuda", max_samples=None,
-                 prefetch=10, num_workers=4, io_threads=8):
+                 prefetch=12, num_workers=6, io_threads=16):
         files = sorted(Path(root).glob("*.pt"))
         if not files:
             raise FileNotFoundError(f"No .pt files in {root}")
