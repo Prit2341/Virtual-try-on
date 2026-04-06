@@ -1,214 +1,308 @@
-# VITON-HD — Virtual Try-On
+# VITON Virtual Try-On — Multi-Architecture Benchmark
 
-A PyTorch implementation of a 2-stage virtual try-on system based on VITON-HD. Given a person image and a clothing item, the model generates a realistic try-on result.
-
----
-
-## Architecture
-
-Two sequential networks trained independently:
-
-```
-Stage 1 — WarpNet
-  Input : cloth(3) + cloth_mask(1) + agnostic(3) + pose(18) = 25 channels
-  Output: flow field (2, H, W) → warped cloth (3, H, W) + warped mask (1, H, W)
-  Loss  : L1 + VGG perceptual + Total Variation
-
-Stage 2 — TryOnNet
-  Input : agnostic(3) + warped_cloth(3) + warped_mask(1) + pose(18) + parse_onehot(18) = 43 channels
-  Output: try-on RGB image (3, 512, 384)
-  Loss  : L1 + VGG perceptual + PatchGAN adversarial (LSGAN)
-```
-
-Both networks use a **U-Net** encoder-decoder with skip connections and **InstanceNorm**.
+A PyTorch implementation comparing **seven** virtual try-on architectures on the VITON dataset. Given a person image and a target clothing item, each model generates a photorealistic try-on result at 256×192 resolution.
 
 ---
 
-## Project Structure
+## 1. Project Overview
 
+Virtual try-on requires two key capabilities:
+1. **Geometric alignment** — warping the flat clothing image to fit the person's pose and body shape.
+2. **Appearance synthesis** — compositing the warped cloth onto the person while preserving skin, hair, and background.
+
+Most models in this project use a **2-stage pipeline**:
 ```
-Virtul_try_on/
-├── dataset/
-│   ├── raw/
-│   │   ├── image/          # person images (11,647)
-│   │   └── cloth/          # garment images (11,647)
-│   ├── train_pairs.txt     # 11,647 training pairs
-│   ├── test_pairs.txt      # 2,032 test pairs
-│   └── train/              # preprocessed outputs
-│       ├── person/
-│       ├── cloth/
-│       ├── parsing/        # SegFormer segmentation maps
-│       ├── pose/           # MediaPipe 18-keypoint heatmaps
-│       ├── cloth_mask/     # U2Net cloth masks
-│       ├── agnostic/       # clothing-removed person images
-│       └── tensors/        # .pt bundles for fast DataLoader
-├── model/
-│   ├── config.py           # all hyperparameters
-│   ├── dataset.py          # VITONDataset (reads .pt bundles)
-│   ├── networks.py         # WarpNet, TryOnNet, PatchDiscriminator, VGGLoss
-│   └── train.py            # 2-stage training loop with AMP + TensorBoard
-├── steps/                  # modular preprocessing pipeline
-│   ├── step1_validate.py
-│   ├── step2_parsing.py
-│   ├── step3_pose.py
-│   ├── step4_cloth_mask.py
-│   ├── step5_agnostic.py
-│   └── step6_normalize.py
-├── preprocess.py           # main all-in-one preprocessing script
-├── pipeline.py             # alternative: preprocessing via steps/ modules
-├── verify.py               # visual spot-check of preprocessed outputs
-└── requirements.txt
+Stage 1 (Warp):  [agnostic | pose | cloth | cloth_mask] (25ch)  →  warped cloth
+Stage 2 (Try-on): [agnostic | warped | warped_mask | pose] (25ch) →  RGB output
 ```
+
+The `single_stage` model skips warping entirely and learns implicit alignment in one pass.
 
 ---
 
-## Requirements
+## 2. Models
 
-- Python 3.12
-- CUDA-capable GPU (tested on GTX 1650 4 GB and RTX 4070 12 GB)
+| # | Model | Key Architectural Difference |
+|---|-------|------------------------------|
+| 1 | **baseline** | WarpNet (optical flow) + TryOnNet (4-level U-Net) |
+| 2 | **v2** | GMMNet (TPS warp with 25 control points) + TryOnNetV2 (5-level U-Net + alpha blending) |
+| 3 | **resnet_gen** | WarpNet + ResNet9 generator (no skip connections, 9 residual blocks) |
+| 4 | **attention_unet** | Self-attention non-local block at bottleneck of both warp and synthesis nets |
+| 5 | **single_stage** | Deep 5-level U-Net — no explicit warp stage, learns alignment implicitly |
+| 6 | **spade** | WarpNet + SPADE decoder conditioned on pose map (spatially-adaptive normalisation) |
+| 7 | **multiscale** | Coarse-to-fine: CoarseNet at 128×96, RefineNet upsamples to 256×192 |
 
-Install dependencies:
+### Architecture Details
+
+**baseline** (`model/warp_model.py`, `model/tryon_model.py`)
+- WarpNet: 4-block U-Net → 2ch optical flow field → `grid_sample` warp
+- TryOnNet: 4-block U-Net encoder-decoder with skip connections
+
+**v2** (`model/gmm_model.py`, `model/tryon_model_v2.py`)
+- GMMNet: TPS warp via learned control-point offsets; smoothly-varying deformation
+- TryOnNetV2: predicts rendered region + alpha mask; output = α·warped + (1−α)·rendered
+
+**resnet_gen** (`models/resnet_gen/network.py`)
+- ResNetGenerator: reflection-padded 7×7 head → 2× stride-2 downsampling → 9 ResBlocks → 2× stride-2 upsampling → Tanh
+
+**attention_unet** (`models/attention_unet/network.py`)
+- AttentionWarpNet / AttentionTryOnNet: identical to baseline but with a non-local self-attention block (gamma=0 init) inserted at the bottleneck (H/16)
+
+**single_stage** (`models/single_stage/network.py`)
+- SingleStageTryOn: 5-level U-Net (H → H/32 encoder, H/32 → H decoder), input is raw cloth — no pre-warping
+
+**spade** (`models/spade/network.py`)
+- SPADETryOnNet: Conv encoder + SPADEResBlock decoder; each normalisation layer receives the pose map to condition gamma/beta spatially
+
+**multiscale** (`models/multiscale/network.py`)
+- CoarseNet: WarpNet (ngf=32) + TryOnNet (ngf=32) at 128×96
+- RefineNet: 3-level U-Net that takes coarse output + full-res warped cloth and upsamples to 256×192
+
+---
+
+## 3. Setup
+
+### Requirements
 
 ```bash
 pip install -r requirements.txt
 ```
 
-Key packages:
+Key dependencies: `torch`, `torchvision`, `Pillow`, `tqdm`, `opencv-python`.
 
-| Package | Purpose |
-|---|---|
-| `torch`, `torchvision` | Training and inference |
-| `transformers` | SegFormer human parsing |
-| `mediapipe` | Pose estimation (18 keypoints) |
-| `rembg`, `onnxruntime` | U2Net cloth mask extraction |
-| `tensorboard` | Training visualization |
-| `opencv-python`, `Pillow` | Image I/O |
+### Data Preparation
 
----
-
-## Quick Start
-
-### 1 — Preprocess
+1. Download the VITON dataset and place images under `dataset/train/` and `dataset/test/`.
+2. Run preprocessing to generate `.pt` tensor files:
 
 ```bash
-# Preprocess training data (limit for a quick smoke test)
-python preprocess.py --split train --limit 1000
-
-# Full dataset
-python preprocess.py --split both
+python preprocess.py --split train
+python preprocess.py --split test
 ```
 
-Outputs go to `dataset/train/tensors/*.pt` (one bundle per image pair).
+Each `.pt` file contains:
+| Key | Shape | Range |
+|-----|-------|-------|
+| `agnostic` | (3, 256, 192) | [-1, 1] |
+| `cloth` | (3, 256, 192) | [-1, 1] |
+| `cloth_mask` | (256, 192) | [0, 1] |
+| `pose_map` | (18, 256, 192) | [-1, 1] |
+| `person` | (3, 256, 192) | [-1, 1] |
 
-### 2 — Train Stage 1: WarpNet
-
-```bash
-python model/train.py --stage warp --epochs 30
+Expected directory layout after preprocessing:
 ```
-
-### 3 — Train Stage 2: TryOnNet
-
-```bash
-python model/train.py --stage tryon --epochs 30
-```
-
-### 4 — Resume from checkpoint
-
-```bash
-python model/train.py --stage warp --resume checkpoints/warp_epoch_10.pth
-```
-
-### 5 — Verify preprocessing
-
-```bash
-python verify.py               # random sample from train split
-python verify.py --split test --n 5
-python verify.py --name 00000_00
+dataset/
+  train/
+    tensors/   ← .pt files
+  test/
+    tensors/
 ```
 
 ---
 
-## GPU Configuration
+## 4. Training
 
-### GTX 1650 (4 GB VRAM) — recommended settings in `model/config.py`
+All training scripts accept `--data`, `--epochs`, `--batch`, `--lr`, `--patience` flags.
+Default: epochs=100, batch=8, lr=2e-4, patience=20.
 
-```python
-BATCH_SIZE  = 4
-NGF         = 48
-NDF         = 48
-NUM_WORKERS = 0     # required on Windows
-AMP         = True
-N_EPOCHS    = 30
-LR_DECAY_START = 20
-```
-
-### RTX 4070 (12 GB VRAM) — default config settings
-
-```python
-BATCH_SIZE  = 12
-NGF         = 64
-NDF         = 64
-NUM_WORKERS = 4
-AMP         = True
-N_EPOCHS    = 100
-LR_DECAY_START = 50
-```
-
-> **Windows users**: Always set `NUM_WORKERS = 0` — Python multiprocessing fork is not supported on Windows.
-
----
-
-## Training Details
-
-| Setting | Value |
-|---|---|
-| Image resolution | 512 × 384 |
-| Optimizer | Adam (β1=0.5, β2=0.999) |
-| Learning rate (G & D) | 2e-4 |
-| LR schedule | Linear decay to 0 over second half of training |
-| Mixed precision | fp16 autocast + GradScaler |
-| TensorBoard logging | every 50 iterations (scalars), every 10 epochs (images) |
-| Checkpoint interval | every 5 epochs |
-
-### Loss Weights
-
-| Loss | WarpNet | TryOnNet |
-|---|---|---|
-| L1 | 10.0 | 10.0 |
-| VGG perceptual | 5.0 | 5.0 |
-| Total variation (flow) | 1.0 | — |
-| PatchGAN (LSGAN) | — | 1.0 |
-
----
-
-## Preprocessing Pipeline
-
-Six steps run sequentially per image pair:
-
-1. **Validate & resize** — checks images, resizes to 512×384
-2. **Human parsing** — SegFormer (`mattmdjaga/segformer_b2_clothes`) → 18-class label map
-3. **Pose estimation** — MediaPipe → 18-keypoint Gaussian heatmaps saved as `.pt`
-4. **Cloth mask** — U2Net via `rembg` → binary cloth mask
-5. **Agnostic** — erases clothing region (labels 4, 7, 17) from person image
-6. **Normalize & bundle** — tensors normalized to [-1, 1], saved as a single `.pt` file
-
----
-
-## TensorBoard
+### Baseline (V1)
 
 ```bash
-tensorboard --logdir logs
+python train.py --stage warp
+python train.py --stage tryon
 ```
 
-Logs scalars (loss curves) and image grids (warped cloth, fake vs. real person) during training.
+### V2 (GMM + composition)
+
+```bash
+python train_v2.py --stage gmm
+python train_v2.py --stage tryon
+```
+
+### ResNet Generator
+
+```bash
+python models/resnet_gen/train.py --stage both
+# or separately:
+python models/resnet_gen/train.py --stage warp
+python models/resnet_gen/train.py --stage tryon
+```
+
+### Attention U-Net
+
+```bash
+python models/attention_unet/train.py --stage both
+```
+
+### Single Stage
+
+```bash
+python models/single_stage/train.py
+```
+
+### SPADE
+
+```bash
+python models/spade/train.py --stage both
+```
+
+### Multiscale (Coarse-to-Fine)
+
+```bash
+python models/multiscale/train.py --stage both
+# or separately:
+python models/multiscale/train.py --stage coarse
+python models/multiscale/train.py --stage refine
+```
+
+### Resuming Training
+
+Each script saves the last 3 epoch checkpoints alongside `*_best.pth`.
+Pass `--ckpt-dir` to specify a custom checkpoint directory.
 
 ---
 
-## Common Issues
+## 5. Inference / Visual Results
 
-| Problem | Fix |
-|---|---|
-| `RuntimeError` on DataLoader | Set `NUM_WORKERS = 0` on Windows |
-| CUDA OOM | Reduce `BATCH_SIZE`, or set `NGF = NDF = 48` |
-| NaN losses | Set `AMP = False` to debug; check input normalization |
-| Slow preprocessing | Increase `--batch` arg (default 8); reduce `--limit` for testing |
+Each model's `infer.py` saves a side-by-side image strip.
+
+### Baseline
+
+```bash
+python infer.py --n 8
+```
+
+### V2
+
+```bash
+python infer_v2.py --n 8
+```
+
+### ResNet Generator
+
+```bash
+python models/resnet_gen/infer.py --n 8 --data dataset/test/tensors
+# Saves: results/resnet_gen/results_strip.jpg
+# Columns: person | cloth | agnostic | warped | output
+```
+
+### Attention U-Net
+
+```bash
+python models/attention_unet/infer.py --n 8
+# Saves: results/attention_unet/results_strip.jpg
+```
+
+### Single Stage
+
+```bash
+python models/single_stage/infer.py --n 8
+# Saves: results/single_stage/results_strip.jpg
+# Columns: person | cloth | agnostic | output  (no warp column)
+```
+
+### SPADE
+
+```bash
+python models/spade/infer.py --n 8
+# Saves: results/spade/results_strip.jpg
+```
+
+### Multiscale
+
+```bash
+python models/multiscale/infer.py --n 8
+# Saves: results/multiscale/results_strip.jpg
+# Columns: person | cloth | agnostic | coarse | refined
+```
+
+All scripts accept:
+- `--n N` — number of test samples (default 8)
+- `--data PATH` — path to `.pt` tensor directory
+- `--save PATH` — output directory
+- `--ckpt-dir PATH` — checkpoint directory
+
+---
+
+## 6. Comparison Across All Models
+
+`compare_all.py` evaluates every model that has trained checkpoints, then produces:
+- A terminal table of L1 / SSIM / PSNR metrics
+- `results/comparison_summary.csv`
+- `results/comparison_grid.jpg` — side-by-side grid for N test samples
+
+```bash
+# Evaluate all models
+python compare_all.py
+
+# Evaluate specific models only
+python compare_all.py --models baseline resnet_gen spade
+
+# Custom options
+python compare_all.py --n 16 --split test --batch 8
+```
+
+### Metrics
+
+| Metric | Description |
+|--------|-------------|
+| **L1** | Mean absolute pixel error (lower is better) |
+| **SSIM** | Structural Similarity Index (higher is better, max 1.0) |
+| **PSNR** | Peak Signal-to-Noise Ratio in dB (higher is better) |
+
+All metrics are computed in the [-1, 1] range (PSNR uses max_range²=4.0).
+
+---
+
+## 7. Checkpoints Directory Structure
+
+```
+checkpoints/
+  warp_best.pth          ← baseline WarpNet
+  tryon_best.pth         ← baseline TryOnNet
+  v2/
+    gmm_best.pth
+    tryon_best.pth
+  resnet_gen/
+    warp_best.pth
+    resnet_gen_best.pth
+    warp_epoch*.pth      ← last 3 epoch checkpoints
+    resnet_gen_epoch*.pth
+  attention_unet/
+    warp_best.pth
+    tryon_best.pth
+    warp_epoch*.pth
+    tryon_epoch*.pth
+  single_stage/
+    model_best.pth
+    model_epoch*.pth
+  spade/
+    warp_best.pth
+    tryon_best.pth
+  multiscale/
+    coarse_best.pth
+    refine_best.pth
+    coarse_epoch*.pth
+    refine_epoch*.pth
+```
+
+### Log Files
+
+```
+logs/
+  resnet_gen/    train_YYYYMMDD_HHMMSS.txt
+  attention_unet/
+  single_stage/
+  spade/
+  multiscale/
+```
+
+---
+
+## Citation
+
+If you use this codebase, please cite the relevant papers:
+
+- Han et al., *"VITON: An Image-based Virtual Try-on Network"*, CVPR 2018
+- Wang et al., *"Toward Characteristic-Preserving Image-based Virtual Try-On Network"*, ECCV 2018 (CP-VTON)
+- Park et al., *"Semantic Image Synthesis with Spatially-Adaptive Normalization"*, CVPR 2019 (SPADE)

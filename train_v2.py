@@ -34,19 +34,21 @@ from tqdm import tqdm
 
 from model.gmm_model import GMMNet
 from model.tryon_model_v2 import TryOnNetV2
+from shared.dataset import FastVITONLoader
+from shared.metrics import ssim_metric, psnr_metric, metrics_header, metrics_separator, metrics_row
 
 # ── Defaults ───────────────────────────────────────────────────────────────────
 
 DEVICE      = "cuda" if torch.cuda.is_available() else "cpu"
 _BASE       = Path(__file__).resolve().parent
 DATA_DIR    = str(_BASE / "dataset" / "train" / "tensors")
-CKPT_DIR    = str(_BASE / "checkpoints")
-LOG_DIR     = str(_BASE / "logs")
+CKPT_DIR    = str(_BASE / "checkpoints" / "v2")
+LOG_DIR     = str(_BASE / "logs" / "v2")
 
-BATCH_SIZE  = 16
+BATCH_SIZE  = 64
 LR          = 2e-4
 BETAS       = (0.5, 0.999)
-NUM_WORKERS = 2
+NUM_WORKERS = 0
 DECAY_START = 50
 
 LAMBDA_L1        = 1.0
@@ -62,7 +64,7 @@ LAMBDA_ALPHA_REG = 0.5    # pushes alpha toward 0 or 1 (crisp boundaries)
 PATIENCE    = 20
 MIN_DELTA   = 1e-4
 
-CLOTH_LABELS = [4, 7, 17]
+CLOTH_LABELS = [5, 6, 7]   # CIHP: upper-clothes=5, skirt=6, dress=7 (matches parse-v3 labels)
 
 torch.backends.cudnn.benchmark = True
 
@@ -106,12 +108,16 @@ class VITONDataset(Dataset):
         if not files:
             raise FileNotFoundError(f"No .pt files in {root}")
         self.files = files[:max_samples] if max_samples else files
+        # Cache entire dataset in RAM — eliminates disk I/O bottleneck
+        print(f"Caching {len(self.files)} samples in RAM...", flush=True)
+        self.cache = [torch.load(f, map_location="cpu", weights_only=False) for f in self.files]
+        print(f"Dataset cached ({len(self.cache)} samples)", flush=True)
 
     def __len__(self):
         return len(self.files)
 
     def __getitem__(self, idx):
-        return torch.load(self.files[idx], map_location="cpu", weights_only=False)
+        return self.cache[idx]
 
 
 # ── VGG Loss ──────────────────────────────────────────────────────────────────
@@ -214,19 +220,15 @@ def fmt_time(seconds):
 # ── Stage 1: GMM Training ────────────────────────────────────────────────────
 
 def train_gmm(args, logger):
-    dataset = VITONDataset(args.data, max_samples=args.max_samples)
-    loader  = DataLoader(dataset, batch_size=args.batch, shuffle=True,
-                         num_workers=args.workers, pin_memory=True, drop_last=True,
-                         persistent_workers=args.workers > 0,
-                         prefetch_factor=1 if args.workers > 0 else None,
-                         multiprocessing_context="spawn" if args.workers > 0 else None)
+    loader = FastVITONLoader(args.data, batch_size=args.batch,
+                             device=DEVICE, max_samples=args.max_samples)
 
     log_section(logger, "GMM TRAINING (V2)  —  CONFIGURATION")
     logger.info(f"  Device         : {DEVICE}")
     if DEVICE == "cuda":
         logger.info(f"  GPU            : {torch.cuda.get_device_name(0)}")
         logger.info(f"  VRAM           : {torch.cuda.get_device_properties(0).total_memory/1e9:.1f} GB")
-    logger.info(f"  Dataset        : {len(dataset)} samples")
+    logger.info(f"  Dataset        : {loader.n_samples} samples")
     logger.info(f"  Batches/epoch  : {len(loader)}")
     logger.info(f"  Batch size     : {args.batch}")
     logger.info(f"  Learning rate  : {args.lr}")
@@ -265,8 +267,8 @@ def train_gmm(args, logger):
     train_start = time.time()
 
     log_section(logger, "GMM TRAINING  —  EPOCH LOG")
-    logger.info(f"  {'Epoch':>6}  {'Avg L1':>8}  {'Avg VGG':>9}  {'Avg Mask':>9}  {'LR':>10}  {'Time':>8}  {'Best L1':>8}  Status")
-    logger.info(f"  {'-'*6}  {'-'*8}  {'-'*9}  {'-'*9}  {'-'*10}  {'-'*8}  {'-'*8}  {'-'*20}")
+    logger.info(metrics_header())
+    logger.info(metrics_separator())
 
     for epoch in range(start_epoch, args.epochs + 1):
         model.train()
@@ -276,15 +278,16 @@ def train_gmm(args, logger):
         epoch_start = time.time()
 
         for batch in pbar:
-            ag   = batch["agnostic"].to(DEVICE)
-            cl   = batch["cloth"].to(DEVICE)
-            cm   = batch["cloth_mask"].unsqueeze(1).to(DEVICE)
-            pose = batch["pose_map"].to(DEVICE)
-            per  = batch["person"].to(DEVICE)
-            pm   = batch["parse_map"].to(DEVICE)
+            ag   = batch["agnostic"]
+            cl   = batch["cloth"]
+            cm   = batch["cloth_mask"].unsqueeze(1)
+            pose = batch["pose_map"]
+            per  = batch["person"]
+            pm   = batch["parse_map"]
 
-            with autocast(enabled=args.amp):
-                warped_cloth, warped_mask, theta = model(cl, cm, ag, pose)
+            with autocast(enabled=False):  # lstsq requires float32 — no fp16
+                warped_cloth, warped_mask, theta = model(
+                    cl.float(), cm.float(), ag.float(), pose.float())
                 pcm = person_cloth_mask(pm)
 
                 # Losses
@@ -325,34 +328,40 @@ def train_gmm(args, logger):
         avg_mask = epoch_mask / max(n_batches, 1)
         cur_lr   = sched.get_last_lr()[0]
 
+        # ── Quality metrics on last batch ────────────────────────────────
+        model.eval()
+        with torch.no_grad():
+            wc, wm, _ = model(cl, cm, ag, pose)
+            epoch_ssim = ssim_metric(wc * pcm, per * pcm).item()
+            epoch_psnr = psnr_metric(wc * pcm, per * pcm).item()
+            log_images(writer, "gmm/cloth",  cl,       step)
+            log_images(writer, "gmm/warped", wc,       step)
+            log_images(writer, "gmm/target", per * pcm, step)
+        model.train()
+
+        writer.add_scalar("gmm/epoch_ssim", epoch_ssim, epoch)
+        writer.add_scalar("gmm/epoch_psnr", epoch_psnr, epoch)
+
         ckpt_saved = ""
         if epoch % 10 == 0 or epoch == args.epochs:
             save_ckpt(f"{CKPT_DIR}/gmm_epoch_{epoch:03d}.pth", model, opt, epoch)
             cleanup_old_checkpoints("gmm", keep=2)
-            ckpt_saved = f"[ckpt: gmm_epoch_{epoch:03d}.pth]"
-            model.eval()
-            with torch.no_grad():
-                wc, wm, _ = model(cl, cm, ag, pose)
-                log_images(writer, "gmm/cloth",  cl,       step)
-                log_images(writer, "gmm/warped", wc,       step)
-                log_images(writer, "gmm/target", per * pcm, step)
-            model.train()
+            ckpt_saved = "[ckpt]"
 
         if avg_l1 < best_l1 - MIN_DELTA:
             best_l1 = avg_l1
             best_epoch = epoch
             patience_counter = 0
             save_ckpt(f"{CKPT_DIR}/gmm_best.pth", model, opt, epoch)
-            status = f"NEW BEST  [saved gmm_best.pth]  {ckpt_saved}"
+            status = f"* NEW BEST *  {ckpt_saved}"
         else:
             patience_counter += 1
-            status = f"no improvement  {patience_counter}/{args.patience}  {ckpt_saved}"
+            status = f"wait {patience_counter}/{args.patience}  {ckpt_saved}"
 
-        logger.info(
-            f"  {epoch:>6}  {avg_l1:>8.4f}  {avg_vgg:>9.4f}  {avg_mask:>9.4f}  {cur_lr:>10.2e}"
-            f"  {fmt_time(epoch_time):>8}  {best_l1:>8.4f}  {status}"
-        )
+        logger.info(metrics_row(epoch, avg_l1, avg_vgg, epoch_ssim, epoch_psnr,
+                                cur_lr, fmt_time(epoch_time), best_l1, status))
         csv_writer.writerow([epoch, f"{avg_l1:.6f}", f"{avg_vgg:.6f}",
+                             f"{epoch_ssim:.4f}", f"{epoch_psnr:.2f}",
                              f"{cur_lr:.2e}", f"{epoch_time:.1f}", f"{best_l1:.6f}"])
         csv_fh.flush()
 
@@ -372,18 +381,14 @@ def train_gmm(args, logger):
 # ── Stage 2: TryOnNet V2 Training ────────────────────────────────────────────
 
 def train_tryon(args, logger):
-    dataset = VITONDataset(args.data, max_samples=args.max_samples)
-    loader  = DataLoader(dataset, batch_size=args.batch, shuffle=True,
-                         num_workers=args.workers, pin_memory=True, drop_last=True,
-                         persistent_workers=args.workers > 0,
-                         prefetch_factor=1 if args.workers > 0 else None,
-                         multiprocessing_context="spawn" if args.workers > 0 else None)
+    loader = FastVITONLoader(args.data, batch_size=args.batch,
+                             device=DEVICE, max_samples=args.max_samples)
 
     log_section(logger, "TRYONNET V2 TRAINING  —  CONFIGURATION")
     logger.info(f"  Device         : {DEVICE}")
     if DEVICE == "cuda":
         logger.info(f"  GPU            : {torch.cuda.get_device_name(0)}")
-    logger.info(f"  Dataset        : {len(dataset)} samples")
+    logger.info(f"  Dataset        : {loader.n_samples} samples")
     logger.info(f"  Batch size     : {args.batch}")
     logger.info(f"  Learning rate  : {args.lr}")
     logger.info(f"  Lambda L1      : {LAMBDA_L1_TRYON}")
@@ -429,8 +434,8 @@ def train_tryon(args, logger):
     train_start = time.time()
 
     log_section(logger, "TRYONNET V2  —  EPOCH LOG")
-    logger.info(f"  {'Epoch':>6}  {'Avg L1':>8}  {'Avg VGG':>9}  {'LR':>10}  {'Time':>8}  {'Best L1':>8}  Status")
-    logger.info(f"  {'-'*6}  {'-'*8}  {'-'*9}  {'-'*10}  {'-'*8}  {'-'*8}  {'-'*20}")
+    logger.info(metrics_header())
+    logger.info(metrics_separator())
 
     for epoch in range(start_epoch, args.epochs + 1):
         gen.train()
@@ -440,11 +445,11 @@ def train_tryon(args, logger):
         epoch_start = time.time()
 
         for batch in pbar:
-            ag   = batch["agnostic"].to(DEVICE)
-            cl   = batch["cloth"].to(DEVICE)
-            cm   = batch["cloth_mask"].unsqueeze(1).to(DEVICE)
-            pose = batch["pose_map"].to(DEVICE)
-            per  = batch["person"].to(DEVICE)
+            ag   = batch["agnostic"]
+            cl   = batch["cloth"]
+            cm   = batch["cloth_mask"].unsqueeze(1)
+            pose = batch["pose_map"]
+            per  = batch["person"]
 
             # Warp with frozen GMM
             with torch.no_grad():
@@ -494,34 +499,40 @@ def train_tryon(args, logger):
         avg_vgg = epoch_vgg / max(n_batches, 1)
         cur_lr  = sched.get_last_lr()[0]
 
+        # ── Quality metrics ──────────────────────────────────────────────
+        gen.eval()
+        with torch.no_grad():
+            epoch_ssim = ssim_metric(output, per).item()
+            epoch_psnr = psnr_metric(output, per).item()
+            log_images(writer, "tryon/output",  output,  step)
+            log_images(writer, "tryon/person",  per,     step)
+            log_images(writer, "tryon/warped",  warped_cloth, step)
+            writer.add_images("tryon/alpha", alpha[:2], step)
+        gen.train()
+
+        writer.add_scalar("tryon/epoch_ssim", epoch_ssim, epoch)
+        writer.add_scalar("tryon/epoch_psnr", epoch_psnr, epoch)
+
         ckpt_saved = ""
         if epoch % 10 == 0 or epoch == args.epochs:
-            save_ckpt(f"{CKPT_DIR}/tryon_v2_epoch_{epoch:03d}.pth", gen, opt, epoch)
-            cleanup_old_checkpoints("tryon_v2", keep=2)
-            ckpt_saved = f"[ckpt: tryon_v2_epoch_{epoch:03d}.pth]"
-            gen.eval()
-            with torch.no_grad():
-                log_images(writer, "tryon/output",  output,  step)
-                log_images(writer, "tryon/person",  per,     step)
-                log_images(writer, "tryon/warped",  warped_cloth, step)
-                writer.add_images("tryon/alpha", alpha[:2], step)
-            gen.train()
+            save_ckpt(f"{CKPT_DIR}/tryon_epoch_{epoch:03d}.pth", gen, opt, epoch)
+            cleanup_old_checkpoints("tryon", keep=2)
+            ckpt_saved = "[ckpt]"
 
         if avg_l1 < best_l1 - MIN_DELTA:
             best_l1 = avg_l1
             best_epoch = epoch
             patience_counter = 0
-            save_ckpt(f"{CKPT_DIR}/tryon_v2_best.pth", gen, opt, epoch)
-            status = f"NEW BEST  [saved tryon_v2_best.pth]  {ckpt_saved}"
+            save_ckpt(f"{CKPT_DIR}/tryon_best.pth", gen, opt, epoch)
+            status = f"* NEW BEST *  {ckpt_saved}"
         else:
             patience_counter += 1
-            status = f"no improvement  {patience_counter}/{args.patience}  {ckpt_saved}"
+            status = f"wait {patience_counter}/{args.patience}  {ckpt_saved}"
 
-        logger.info(
-            f"  {epoch:>6}  {avg_l1:>8.4f}  {avg_vgg:>9.4f}  {cur_lr:>10.2e}"
-            f"  {fmt_time(epoch_time):>8}  {best_l1:>8.4f}  {status}"
-        )
+        logger.info(metrics_row(epoch, avg_l1, avg_vgg, epoch_ssim, epoch_psnr,
+                                cur_lr, fmt_time(epoch_time), best_l1, status))
         csv_writer.writerow([epoch, f"{avg_l1:.6f}", f"{avg_vgg:.6f}",
+                             f"{epoch_ssim:.4f}", f"{epoch_psnr:.2f}",
                              f"{cur_lr:.2e}", f"{epoch_time:.1f}", f"{best_l1:.6f}"])
         csv_fh.flush()
 
@@ -533,7 +544,7 @@ def train_tryon(args, logger):
     log_section(logger, "TRYONNET V2  —  FINAL SUMMARY")
     logger.info(f"  Best L1 : {best_l1:.4f}  (epoch {best_epoch})")
     logger.info(f"  Time    : {fmt_time(total_time)}")
-    logger.info(f"  Ckpt    : {CKPT_DIR}/tryon_v2_best.pth")
+    logger.info(f"  Ckpt    : {CKPT_DIR}/tryon_best.pth")
     csv_fh.close()
     writer.close()
 
@@ -556,6 +567,8 @@ def main():
     p.add_argument("--gmm-ckpt",    default="", dest="gmm_ckpt")
     p.add_argument("--max-samples", type=int, default=None, dest="max_samples")
     args = p.parse_args()
+    if torch.cuda.is_available():
+        torch.cuda.set_per_process_memory_fraction(0.80)  # hard cap: OOM before CPU spillage
 
     if args.stage == "both":
         logger = setup_logger("gmm")

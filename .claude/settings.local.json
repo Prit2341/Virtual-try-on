@@ -6,7 +6,13 @@
       "Bash(python -c \"from PIL import Image; print\\(''PIL ok''\\)\")",
       "Bash(pip install:*)",
       "Bash(python -c \":*)",
-      "Bash(nvidia-smi --query-gpu=name,memory.total --format=csv,noheader)"
+      "Bash(nvidia-smi --query-gpu=name,memory.total --format=csv,noheader)",
+      "Bash(ls -la checkpoints/tryon*.pth)",
+      "Bash(source venv/Scripts/activate)",
+      "Bash(python infer.py --n 8 --data dataset/test/tensors)",
+      "Bash(find model:*)",
+      "Bash(xargs grep:*)",
+      "Bash(python train.py --stage warp --variant v1_improved --list-variants)"
     ]
   }
 }

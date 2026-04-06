@@ -41,22 +41,24 @@ class WarpNet(nn.Module):
     Input  (25ch): agnostic(3) + pose(18) + cloth(3) + cloth_mask(1)
     Output (2ch):  flow field at H/2 resolution (upsampled in warp_cloth)
 
-    4-block U-Net with concat skips, ngf=32.
-    Converges in 5-10 epochs on ~10k samples.
+    4-block U-Net with concat skips.
+    flow_scale controls max displacement as fraction of image size.
     """
 
-    def __init__(self, in_channels=25, ngf=64):
+    def __init__(self, in_channels=25, ngf=64, flow_scale=0.5):
         super().__init__()
+        self.flow_scale = flow_scale
+
         # Encoder  (H → H/2 → H/4 → H/8 → H/16)
-        self.e1 = ConvBlock(in_channels, ngf)        # 32
-        self.e2 = ConvBlock(ngf,     ngf * 2)        # 64
-        self.e3 = ConvBlock(ngf * 2, ngf * 4)        # 128
-        self.e4 = ConvBlock(ngf * 4, ngf * 8)        # 256  (bottleneck)
+        self.e1 = ConvBlock(in_channels, ngf)
+        self.e2 = ConvBlock(ngf,     ngf * 2)
+        self.e3 = ConvBlock(ngf * 2, ngf * 4)
+        self.e4 = ConvBlock(ngf * 4, ngf * 8)
 
         # Decoder with concat skip connections
-        self.d1 = UpBlock(ngf * 8, ngf * 4, ngf * 4)  # + e3 → 128
-        self.d2 = UpBlock(ngf * 4, ngf * 2, ngf * 2)  # + e2 → 64
-        self.d3 = UpBlock(ngf * 2, ngf,     ngf)       # + e1 → 32
+        self.d1 = UpBlock(ngf * 8, ngf * 4, ngf * 4)
+        self.d2 = UpBlock(ngf * 4, ngf * 2, ngf * 2)
+        self.d3 = UpBlock(ngf * 2, ngf,     ngf)
 
         # Flow head — output at H/2
         self.flow = nn.Conv2d(ngf, 2, 3, padding=1)
@@ -71,6 +73,4 @@ class WarpNet(nn.Module):
         d2 = self.d2(d1, e2)  # H/4
         d3 = self.d3(d2, e1)  # H/2
 
-        # Scale to ±0.5: max displacement = 50% of image size.
-        # Increased from 0.3 — previous budget was too tight for clothes needing torso stretch.
-        return torch.tanh(self.flow(d3)) * 0.5
+        return torch.tanh(self.flow(d3)) * self.flow_scale
