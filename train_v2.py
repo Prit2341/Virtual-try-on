@@ -1,16 +1,41 @@
 #!/usr/bin/env python3
 """
-VITON V2 Training — GMM (TPS Warp) + Composition TryOnNet
-============================================================
-Key differences from train.py (V1):
-  - Stage 1: GMMNet with TPS warp (not dense optical flow)
-  - Stage 2: TryOnNetV2 with composition mask (alpha blending)
-  - Cleaner loss: mask alignment + L1 + VGG for GMM
-  - Alpha regularization for TryOnNet
+Flow-Based Virtual Try-On — Two-Stage Training (PF-AFN / HR-VITON style)
+=========================================================================
+Architecture type: Flow-Based (explicit cloth warping)
+
+    Stage 1 — WARP
+    ┌──────────────────────────────────────────────────────────┐
+    │  Cloth features  ──┐                                     │
+    │                     → Correlation layer → Flow field     │
+    │  Person features ──┘     ↓                               │
+    │                      Grid Sample → Warped cloth          │
+    └──────────────────────────────────────────────────────────┘
+
+    Stage 2 — GENERATE
+    ┌──────────────────────────────────────────────────────────┐
+    │  Person image + Warped cloth → Generator → Final output  │
+    └──────────────────────────────────────────────────────────┘
+
+Key PyTorch operations:
+    # Stage 1 — appearance flow (TPS Geometric Matching Module)
+    cloth_feat, person_feat = encoders(cloth, person)
+    corr = correlation_layer(person_feat, cloth_feat)   # matching cost
+    theta = regressor(corr)                              # control-point offsets
+    grid = tps_generator(theta)                          # flow field
+    warped_cloth = F.grid_sample(cloth, grid)            # warp
+
+    # Stage 2 — generation
+    output = generator(person, warped_cloth)             # synthesise try-on
+    loss = L1(output, target) + VGG(output, target)
+
+Loss:
+    Stage 1 (GMM): mask_L1 + L1 + VGG + TPS_regularization
+    Stage 2 (Gen): L1 + VGG perceptual + alpha regularization
 
 Usage:
   python train_v2.py --stage gmm
-  python train_v2.py --stage tryon --gmm-ckpt checkpoints/gmm_best.pth
+  python train_v2.py --stage tryon --gmm-ckpt checkpoints/v2/gmm_best.pth
   python train_v2.py --stage both --epochs 100
 """
 

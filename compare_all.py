@@ -80,7 +80,7 @@ def _load_state(path: Path, model: nn.Module, label: str) -> bool:
 
 def run_baseline(batch: dict, ckpt_dir: Path, cache: dict) -> torch.Tensor | None:
     if "baseline" not in cache:
-        wn = WarpNet(in_channels=25, ngf=64, flow_scale=0.5).to(DEVICE)
+        wn = WarpNet(in_channels=25, ngf=64, flow_scale=0.25).to(DEVICE)
         tn = TryOnNet(in_channels=25, ngf=64).to(DEVICE)
         ok_w = _load_state(ckpt_dir / "warp_best.pth",  wn, "baseline/warp")
         ok_t = _load_state(ckpt_dir / "tryon_best.pth", tn, "baseline/tryon")
@@ -130,7 +130,7 @@ def run_resnet_gen(batch: dict, ckpt_dir: Path, cache: dict) -> torch.Tensor | N
     if "resnet_gen" not in cache:
         from models.resnet_gen.network import ResNetGenerator
 
-        wn  = WarpNet(in_channels=25, ngf=64, flow_scale=0.5).to(DEVICE)
+        wn  = WarpNet(in_channels=25, ngf=64, flow_scale=0.25).to(DEVICE)
         gen = ResNetGenerator(in_channels=25, ngf=64).to(DEVICE)
         ok_w = _load_state(rg_dir / "warp_best.pth",       wn,  "resnet_gen/warp")
         ok_g = _load_state(rg_dir / "resnet_gen_best.pth", gen, "resnet_gen/gen")
@@ -155,7 +155,7 @@ def run_attention_unet(batch: dict, ckpt_dir: Path, cache: dict) -> torch.Tensor
     if "attention_unet" not in cache:
         from models.attention_unet.network import AttentionWarpNet, AttentionTryOnNet
 
-        wn = AttentionWarpNet(in_channels=25, ngf=64, flow_scale=0.8).to(DEVICE)
+        wn = AttentionWarpNet(in_channels=25, ngf=64, flow_scale=0.25).to(DEVICE)
         tn = AttentionTryOnNet(in_channels=25, ngf=64).to(DEVICE)
         ok_w = _load_state(au_dir / "warp_best.pth",  wn, "attention_unet/warp")
         ok_t = _load_state(au_dir / "tryon_best.pth", tn, "attention_unet/tryon")
@@ -200,7 +200,7 @@ def run_spade(batch: dict, ckpt_dir: Path, cache: dict) -> torch.Tensor | None:
     if "spade" not in cache:
         from models.spade.network import SPADETryOnNet
 
-        wn = WarpNet(in_channels=25, ngf=64, flow_scale=0.5).to(DEVICE)
+        wn = WarpNet(in_channels=25, ngf=64, flow_scale=0.25).to(DEVICE)
         sn = SPADETryOnNet(in_channels=25, ngf=64, label_nc=18).to(DEVICE)
         ok_w = _load_state(sp_dir / "warp_best.pth",  wn, "spade/warp")
         ok_s = _load_state(sp_dir / "tryon_best.pth", sn, "spade/tryon")

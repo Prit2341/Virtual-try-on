@@ -28,7 +28,7 @@ DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 
 def load_models(ckpt_dir: Path) -> tuple:
-    warp_net = WarpNet(in_channels=25, ngf=64, flow_scale=0.5).to(DEVICE)
+    warp_net = WarpNet(in_channels=25, ngf=64, flow_scale=0.25).to(DEVICE)
     warp_path = ckpt_dir / "warp_best.pth"
     if warp_path.exists():
         state = torch.load(warp_path, map_location=DEVICE, weights_only=False)

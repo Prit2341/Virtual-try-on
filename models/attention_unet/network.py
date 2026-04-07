@@ -105,7 +105,7 @@ class AttentionWarpNet(nn.Module):
     Output (2ch):  flow field at H/2 resolution
     """
 
-    def __init__(self, in_channels: int = 25, ngf: int = 64, flow_scale: float = 0.8):
+    def __init__(self, in_channels: int = 25, ngf: int = 64, flow_scale: float = 0.25):
         super().__init__()
         self.flow_scale = flow_scale
 
@@ -123,8 +123,10 @@ class AttentionWarpNet(nn.Module):
         self.d2 = UpBlock(ngf * 4, ngf * 2, ngf * 2)
         self.d3 = UpBlock(ngf * 2, ngf,     ngf)
 
-        # Flow head
+        # Flow head (zero-init for identity start)
         self.flow_head = nn.Conv2d(ngf, 2, 3, padding=1)
+        nn.init.zeros_(self.flow_head.weight)
+        nn.init.zeros_(self.flow_head.bias)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         e1 = self.e1(x)          # H/2

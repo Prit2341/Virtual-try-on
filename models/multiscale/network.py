@@ -74,7 +74,7 @@ class CoarseNet(nn.Module):
 
     def __init__(self, ngf: int = 32):
         super().__init__()
-        self.warp  = WarpNet(in_channels=25, ngf=ngf, flow_scale=0.6)
+        self.warp  = WarpNet(in_channels=25, ngf=ngf, flow_scale=0.25)
         self.tryon = TryOnNet(in_channels=25, ngf=ngf)
 
     def forward(

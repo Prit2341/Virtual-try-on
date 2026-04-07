@@ -44,7 +44,7 @@ def main():
     p.add_argument("--tryon-ckpt", default="", dest="tryon_ckpt")
     p.add_argument("--save",       default=RESULTS_DIR, dest="save")
     p.add_argument("--ngf",        type=int, default=64)
-    p.add_argument("--flow-scale", type=float, default=0.5, dest="flow_scale")
+    p.add_argument("--flow-scale", type=float, default=0.25, dest="flow_scale")
     args = p.parse_args()
 
     ckpt_dir = CKPT_DIR

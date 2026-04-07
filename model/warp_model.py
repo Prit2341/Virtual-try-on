@@ -45,7 +45,7 @@ class WarpNet(nn.Module):
     flow_scale controls max displacement as fraction of image size.
     """
 
-    def __init__(self, in_channels=25, ngf=64, flow_scale=0.5):
+    def __init__(self, in_channels=25, ngf=64, flow_scale=0.25):
         super().__init__()
         self.flow_scale = flow_scale
 
@@ -60,8 +60,10 @@ class WarpNet(nn.Module):
         self.d2 = UpBlock(ngf * 4, ngf * 2, ngf * 2)
         self.d3 = UpBlock(ngf * 2, ngf,     ngf)
 
-        # Flow head — output at H/2
+        # Flow head — output at H/2 (zero-init for identity start)
         self.flow = nn.Conv2d(ngf, 2, 3, padding=1)
+        nn.init.zeros_(self.flow.weight)
+        nn.init.zeros_(self.flow.bias)
 
     def forward(self, x):
         e1 = self.e1(x)   # H/2

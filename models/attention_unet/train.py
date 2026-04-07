@@ -82,7 +82,7 @@ def train_warp(args, logger: logging.Logger) -> None:
     loader = make_loader(args.data, args.batch, max_samples=args.max_samples)
     logger.info(f"[warp] dataset: {len(loader.dataset)} samples  batch={args.batch}")
 
-    model  = AttentionWarpNet(in_channels=25, ngf=64, flow_scale=0.8).to(DEVICE)
+    model  = AttentionWarpNet(in_channels=25, ngf=64, flow_scale=0.25).to(DEVICE)
     opt    = torch.optim.Adam(model.parameters(), lr=args.lr, betas=(0.5, 0.999))
     scaler = GradScaler(enabled=(DEVICE == "cuda"))
     vgg    = VGGLoss().to(DEVICE)
@@ -111,7 +111,7 @@ def train_warp(args, logger: logging.Logger) -> None:
                 l1_img   = l1_fn(warped * pcm, person * pcm)
                 l_vgg    = vgg(warped * pcm, person * pcm)
                 l_mask   = l1_fn(wm, pcm) * 5.0
-                l_smooth = smooth_loss(flow) * 0.5
+                l_smooth = smooth_loss(flow) * 2.0
                 loss     = l1_img + l_vgg + l_mask + l_smooth
 
             scaler.scale(loss).backward()
@@ -161,7 +161,7 @@ def train_tryon(args, logger: logging.Logger) -> None:
     loader = make_loader(args.data, args.batch, max_samples=args.max_samples)
     logger.info(f"[tryon] dataset: {len(loader.dataset)} samples  batch={args.batch}")
 
-    warp_net  = AttentionWarpNet(in_channels=25, ngf=64, flow_scale=0.8).to(DEVICE)
+    warp_net  = AttentionWarpNet(in_channels=25, ngf=64, flow_scale=0.25).to(DEVICE)
     warp_best = ckpt_dir / "warp_best.pth"
     if warp_best.exists():
         state = torch.load(warp_best, map_location=DEVICE, weights_only=False)

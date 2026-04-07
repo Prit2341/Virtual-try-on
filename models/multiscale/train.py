@@ -275,7 +275,7 @@ def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description="Multiscale try-on training")
     p.add_argument("--data",     default=str(ROOT / "dataset" / "train" / "tensors"))
     p.add_argument("--epochs",   type=int, default=100)
-    p.add_argument("--batch",    type=int, default=192)
+    p.add_argument("--batch",    type=int, default=96)
     p.add_argument("--lr",       type=float, default=2e-4)
     p.add_argument("--patience", type=int, default=20)
     p.add_argument("--stage",       choices=["coarse", "refine", "both"], default="both")

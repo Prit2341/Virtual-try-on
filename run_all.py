@@ -36,7 +36,7 @@ MODELS = {
         "script": "train.py",
         "ckpt":   "checkpoints/tryon_best.pth",
         "args":   ["--stage", "both"],
-        "label":  "Baseline (WarpNet + TryOnNet U-Net)",
+        "label":  "Baseline (CNN U-Net, BatchNorm+MaxPool+Bilinear, L1)",
     },
     "v2": {
         "script": "train_v2.py",
@@ -74,19 +74,26 @@ MODELS = {
         "args":   ["--stage", "both"],
         "label":  "Multi-Scale (CoarseNet 128px + RefineNet 256px)",
     },
+    "viton_hd": {
+        "script": "models/viton_hd/train.py",
+        "ckpt":   "checkpoints/viton_hd/alias_best.pth",
+        "args":   ["--stage", "all"],
+        "label":  "VITON-HD (SegGen + GMM/TPS + ALIAS)",
+    },
 }
 
 # Optimal batch sizes from find_optimal_batch.py (RTX 4000 Ada 20 GB, AMP fp16)
 BATCH_SIZES = {
-    # Conservative values — benchmark was L1-only, real training adds VGG overhead.
-    # All tested at ≤75% VRAM to leave room for VGG activations during backward pass.
-    "baseline":      112,  # benchmark 128=46.4% → +VGG fits well under 85%
-    "v2":             48,  # benchmark 48=51.8%;  next step (64) OOMed with VGG
-    "resnet_gen":     48,  # same architecture as v2 warp stage
-    "attention_unet":112,  # same model size as baseline
-    "single_stage":  192,  # lightest model — benchmark 192=49.3%
-    "spade":          64,  # benchmark 64=53.1%
-    "multiscale":    160,  # benchmark 160=45.2%
+    # Reduced from benchmarked values to avoid OOM with new/heavier models.
+    # CNN-Based baseline uses ngf=32 (lighter), others use ngf=64.
+    "baseline":       48,  # CNN-Based ngf=32 — no VGG, safe at 48
+    "v2":             32,  # GMM+TPS+VGG — 32 keeps VRAM comfortable
+    "resnet_gen":     32,  # same architecture as v2 warp stage
+    "attention_unet": 64,  # attention adds overhead vs plain baseline
+    "single_stage":   48,  # 5-level U-Net + VGG — 48 is safe
+    "spade":          48,  # SPADE norm + VGG overhead
+    "multiscale":     64,  # refine stage is lighter than full VGG pass
+    "viton_hd":       16,  # ALIAS generator is heaviest — 16 to be safe
 }
 
 # ---------------------------------------------------------------------------
@@ -107,15 +114,16 @@ def is_trained(model_key: str) -> bool:
     return ckpt.exists()
 
 
-def run_model(model_key: str, extra_args: list, dry_run: bool) -> bool:
+def run_model(model_key: str, extra_args: list, dry_run: bool,
+              batch_override: int = None) -> bool:
     cfg    = MODELS[model_key]
     script = ROOT / cfg["script"]
-    batch  = BATCH_SIZES[model_key]
+    batch  = batch_override if batch_override else BATCH_SIZES[model_key]
     cmd    = [sys.executable, str(script), "--batch", str(batch)] + cfg["args"] + extra_args
 
     print(f"\n{'='*70}")
     print(f"  MODEL : {cfg['label']}")
-    print(f"  BATCH : {batch}")
+    print(f"  BATCH : {batch}" + (" (override)" if batch_override else ""))
     print(f"  CMD   : {' '.join(str(c) for c in cmd)}")
     print(f"{'='*70}")
 
@@ -157,6 +165,8 @@ def main():
                    help="Override epoch count for all models")
     p.add_argument("--max-samples", type=int, default=None,
                    help="Limit dataset size (e.g. 3000 for quick runs)")
+    p.add_argument("--batch",       type=int, default=None,
+                   help="Override batch size for all models")
     args = p.parse_args()
 
     extra = []
@@ -194,7 +204,7 @@ def main():
             continue
 
         try:
-            ok = run_model(key, extra, args.dry_run)
+            ok = run_model(key, extra, args.dry_run, batch_override=args.batch)
             results[key] = "ok" if ok else "failed"
         except KeyboardInterrupt:
             results[key] = "interrupted"
