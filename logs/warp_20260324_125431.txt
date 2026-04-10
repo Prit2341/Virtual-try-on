@@ -1,0 +1,80 @@
+12:54:31  Log file: C:\Virtual_try_on\logs\warp_20260324_125431.txt
+12:54:31  ============================================================
+12:54:31    WARPNET TRAINING  —  CONFIGURATION
+12:54:31  ============================================================
+12:54:31    Stage          : warp
+12:54:31    Device         : cuda
+12:54:31    GPU            : NVIDIA GeForce RTX 4070
+12:54:31    VRAM           : 12.9 GB
+12:54:31    Dataset        : 3000 samples  (C:\Virtual_try_on\dataset\train\tensors)
+12:54:31    Batches/epoch  : 187
+12:54:31    Batch size     : 16
+12:54:31    Learning rate  : 5e-05
+12:54:31    LR decay start : epoch 10
+12:54:31    AMP (fp16)     : True
+12:54:31    Lambda L1      : 1.0
+12:54:31    Lambda VGG     : 0.1
+12:54:31    Max epochs     : 100
+12:54:31    Early stop     : patience=15, min_delta=5e-05
+12:54:31    Resume from    : checkpoints/warp_best.pth
+12:54:31  
+12:54:31    Free disk space    : 23.89 GB
+12:54:31  
+12:54:31  ============================================================
+12:54:31    HYPERPARAMETER CHANGE LOG
+12:54:31  ============================================================
+12:54:31    [2026-03-24]  LR  2e-4 → 5e-5
+12:54:31             Reason: Model diverged after epoch 7 — loss jumped from 0.141 to 0.177. Lower LR prevents gradient instability after initial fast convergence.
+12:54:31  
+12:54:31    [2026-03-24]  LAMBDA_VGG  0.5 → 0.1
+12:54:31             Reason: VGG perceptual loss was competing with L1 and causing L1 to spike. Reducing weight keeps VGG as a texture guide without overpowering pixel-level alignment.
+12:54:31  
+12:54:31    [2026-03-24]  DECAY_START  30 → 10
+12:54:31             Reason: With LR now at 5e-5, decay should begin earlier so learning rate gradually reduces before the model plateaus.
+12:54:31  
+12:54:31    [2026-03-24]  PATIENCE  10 → 15
+12:54:31             Reason: Extra patience to give the model time to improve under the lower LR.
+12:54:31  
+12:54:31    [2026-03-24]  MIN_DELTA  1e-4 → 5e-5
+12:54:31             Reason: Finer improvement threshold to match the slower, more stable convergence at 5e-5 LR.
+12:54:31  
+12:54:31  
+12:54:31  Resumed from epoch 9
+
+12:54:31  ============================================================
+12:54:31    WARPNET TRAINING  —  EPOCH LOG
+12:54:31  ============================================================
+12:54:31     Epoch    Avg L1    Avg VGG          LR   Epoch Time   Best L1  Status
+12:54:31    ------  --------  ---------  ----------  -----------  --------  --------------------
+12:54:55        10    0.1404     0.9444    5.00e-05       0m 22s    0.1404  NEW BEST  [saved warp_best.pth]  [ckpt: warp_epoch_010.pth]
+12:55:13        11    0.1403     0.9423    5.00e-05       0m 17s    0.1403  NEW BEST  [saved warp_best.pth]  
+12:55:31        12    0.1401     0.9413    5.00e-05       0m 17s    0.1401  NEW BEST  [saved warp_best.pth]  
+12:55:49        13    0.1400     0.9405    5.00e-05       0m 17s    0.1400  NEW BEST  [saved warp_best.pth]  
+12:56:07        14    0.1398     0.9421    5.00e-05       0m 17s    0.1398  NEW BEST  [saved warp_best.pth]  
+12:56:24        15    0.1397     0.9421    5.00e-05       0m 17s    0.1397  NEW BEST  [saved warp_best.pth]  
+12:56:43        16    0.1401     0.9423    5.00e-05       0m 18s    0.1397  no improvement  1/15  
+12:57:01        17    0.1400     0.9419    5.00e-05       0m 18s    0.1397  no improvement  2/15  
+12:57:20        18    0.1401     0.9416    5.00e-05       0m 18s    0.1397  no improvement  3/15  
+12:57:38        19    0.1401     0.9371    5.00e-05       0m 18s    0.1397  no improvement  4/15  
+12:57:57        20    0.1397     0.9385    4.94e-05       0m 18s    0.1397  no improvement  5/15  [ckpt: warp_epoch_020.pth]
+12:58:15        21    0.1398     0.9357    4.89e-05       0m 18s    0.1397  no improvement  6/15  
+12:58:33        22    0.1402     0.9372    4.83e-05       0m 18s    0.1397  no improvement  7/15  
+12:58:52        23    0.1397     0.9405    4.78e-05       0m 18s    0.1397  no improvement  8/15  
+12:59:10        24    0.1400     0.9376    4.72e-05       0m 18s    0.1397  no improvement  9/15  
+12:59:29        25    0.1398     0.9375    4.67e-05       0m 18s    0.1397  no improvement  10/15  
+12:59:47        26    0.1399     0.9402    4.61e-05       0m 18s    0.1397  no improvement  11/15  
+13:00:06        27    0.1398     0.9368    4.56e-05       0m 18s    0.1397  no improvement  12/15  
+13:00:24        28    0.1398     0.9338    4.50e-05       0m 18s    0.1397  no improvement  13/15  
+13:00:43        29    0.1398     0.9331    4.44e-05       0m 18s    0.1397  no improvement  14/15  
+13:01:01        30    0.1401     0.9313    4.39e-05       0m 18s    0.1397  no improvement  15/15  [ckpt: warp_epoch_030.pth]
+13:01:01  
+  >> Early stopping triggered at epoch 30.
+13:01:01  ============================================================
+13:01:01    WARPNET TRAINING  —  FINAL SUMMARY
+13:01:01  ============================================================
+13:01:01    Total epochs trained : 21
+13:01:01    Best L1 loss         : 0.1397  (epoch 15)
+13:01:01    Total training time  : 6m 29s
+13:01:01    Best checkpoint      : C:\Virtual_try_on\checkpoints/warp_best.pth
+13:01:01    CSV metrics log      : C:\Virtual_try_on\logs/warp_metrics.csv
+13:01:01  

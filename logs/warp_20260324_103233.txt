@@ -1,0 +1,25 @@
+10:32:33  Log file: logs\warp_20260324_103233.txt
+10:32:34  ============================================================
+10:32:34    WARPNET TRAINING  —  CONFIGURATION
+10:32:34  ============================================================
+10:32:34    Stage          : warp
+10:32:34    Device         : cuda
+10:32:34    GPU            : NVIDIA GeForce RTX 4070
+10:32:34    VRAM           : 12.9 GB
+10:32:34    Dataset        : 3000 samples  (dataset/train/tensors)
+10:32:34    Batches/epoch  : 187
+10:32:34    Batch size     : 16
+10:32:34    Learning rate  : 0.0002
+10:32:34    LR decay start : epoch 30
+10:32:34    AMP (fp16)     : True
+10:32:34    Lambda L1      : 1.0
+10:32:34    Lambda VGG     : 0.5
+10:32:34    Max epochs     : 50
+10:32:34    Early stop     : patience=10, min_delta=0.0001
+10:32:34  
+10:32:34  ============================================================
+10:32:34    WARPNET TRAINING  —  EPOCH LOG
+10:32:34  ============================================================
+10:32:34     Epoch    Avg L1    Avg VGG          LR   Epoch Time   Best L1  Status
+10:32:34    ------  --------  ---------  ----------  -----------  --------  --------------------
+10:45:48         1    0.1656     0.6785    2.00e-04      13m 12s    0.1656  NEW BEST  [saved warp_best.pth]  

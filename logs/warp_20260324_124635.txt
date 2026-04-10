@@ -1,0 +1,54 @@
+12:46:35  Log file: C:\Virtual_try_on\logs\warp_20260324_124635.txt
+12:46:35  ============================================================
+12:46:35    WARPNET TRAINING  —  CONFIGURATION
+12:46:35  ============================================================
+12:46:35    Stage          : warp
+12:46:35    Device         : cuda
+12:46:35    GPU            : NVIDIA GeForce RTX 4070
+12:46:35    VRAM           : 12.9 GB
+12:46:35    Dataset        : 3000 samples  (C:\Virtual_try_on\dataset\train\tensors)
+12:46:35    Batches/epoch  : 187
+12:46:35    Batch size     : 16
+12:46:35    Learning rate  : 0.0002
+12:46:35    LR decay start : epoch 30
+12:46:35    AMP (fp16)     : True
+12:46:35    Lambda L1      : 1.0
+12:46:35    Lambda VGG     : 0.5
+12:46:35    Max epochs     : 100
+12:46:35    Early stop     : patience=10, min_delta=0.0001
+12:46:35  
+12:46:35    Free disk space    : 24.14 GB
+12:46:35  
+12:46:36  ============================================================
+12:46:36    WARPNET TRAINING  —  EPOCH LOG
+12:46:36  ============================================================
+12:46:36     Epoch    Avg L1    Avg VGG          LR   Epoch Time   Best L1  Status
+12:46:36    ------  --------  ---------  ----------  -----------  --------  --------------------
+12:47:02         1    0.1437     1.0314    2.00e-04       0m 25s    0.1437  NEW BEST  [saved warp_best.pth]  
+12:47:19         2    0.1423     0.9808    2.00e-04       0m 17s    0.1423  NEW BEST  [saved warp_best.pth]  
+12:47:37         3    0.1422     0.9708    2.00e-04       0m 17s    0.1422  NEW BEST  [saved warp_best.pth]  
+12:47:55         4    0.1416     0.9698    2.00e-04       0m 17s    0.1416  NEW BEST  [saved warp_best.pth]  
+12:48:12         5    0.1411     0.9617    2.00e-04       0m 17s    0.1411  NEW BEST  [saved warp_best.pth]  
+12:48:30         6    0.1411     0.9574    2.00e-04       0m 17s    0.1411  no improvement  1/10  
+12:48:48         7    0.1407     0.9533    2.00e-04       0m 17s    0.1407  NEW BEST  [saved warp_best.pth]  
+12:49:05         8    0.1410     0.9511    2.00e-04       0m 17s    0.1407  no improvement  1/10  
+12:49:23         9    0.1696     0.9070    2.00e-04       0m 17s    0.1407  no improvement  2/10  
+12:49:41        10    0.1766     0.8799    2.00e-04       0m 17s    0.1407  no improvement  3/10  [ckpt: warp_epoch_010.pth]
+12:49:59        11    0.1767     0.8743    2.00e-04       0m 17s    0.1407  no improvement  4/10  
+12:50:17        12    0.1765     0.8728    2.00e-04       0m 17s    0.1407  no improvement  5/10  
+12:50:34        13    0.1768     0.8728    2.00e-04       0m 17s    0.1407  no improvement  6/10  
+12:50:52        14    0.1766     0.8729    2.00e-04       0m 17s    0.1407  no improvement  7/10  
+12:51:09        15    0.1767     0.8731    2.00e-04       0m 17s    0.1407  no improvement  8/10  
+12:51:27        16    0.1767     0.8735    2.00e-04       0m 17s    0.1407  no improvement  9/10  
+12:51:44        17    0.1766     0.8733    2.00e-04       0m 17s    0.1407  no improvement  10/10  
+12:51:44  
+  >> Early stopping triggered at epoch 17.
+12:51:44  ============================================================
+12:51:44    WARPNET TRAINING  —  FINAL SUMMARY
+12:51:44  ============================================================
+12:51:44    Total epochs trained : 17
+12:51:44    Best L1 loss         : 0.1407  (epoch 7)
+12:51:44    Total training time  : 5m 08s
+12:51:44    Best checkpoint      : C:\Virtual_try_on\checkpoints/warp_best.pth
+12:51:44    CSV metrics log      : C:\Virtual_try_on\logs/warp_metrics.csv
+12:51:44  

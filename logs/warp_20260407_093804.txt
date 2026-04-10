@@ -1,0 +1,161 @@
+09:38:04  Log file: C:\Virtual_try_on\logs\warp_20260407_093804.txt
+09:38:05  ============================================================
+09:38:05    WARPNET TRAINING  —  CONFIGURATION
+09:38:05  ============================================================
+09:38:05    Stage          : warp
+09:38:05    Device         : cuda
+09:38:05    GPU            : NVIDIA RTX 4000 Ada Generation
+09:38:05    VRAM           : 21.5 GB
+09:38:05    Dataset        : 5000 samples  (C:\Virtual_try_on\dataset\train\tensors)
+09:38:05    Batches/epoch  : 44
+09:38:05    Batch size     : 112
+09:38:05    Learning rate  : 0.0002
+09:38:05    LR decay start : epoch 50
+09:38:05    AMP (fp16)     : True
+09:38:05    Lambda L1      : 1.0
+09:38:05    Lambda VGG     : 1.0
+09:38:05    Lambda Smooth  : 2.0
+09:38:05    Lambda Mask    : 5.0
+09:38:05    Max epochs     : 100
+09:38:05    Early stop     : patience=20, min_delta=0.0001
+09:38:05  
+09:38:05    Free disk space    : 721.20 GB
+09:38:05  
+09:38:05  ============================================================
+09:38:05    HYPERPARAMETER CHANGE LOG
+09:38:05  ============================================================
+09:38:05    [2026-03-24]  LR  2e-4 → 5e-5
+09:38:05             Reason: Model diverged after epoch 7 — loss jumped from 0.141 to 0.177. Lower LR prevents gradient instability after initial fast convergence.
+09:38:05  
+09:38:05    [2026-03-24]  LAMBDA_VGG  0.5 → 0.1
+09:38:05             Reason: VGG perceptual loss was competing with L1 and causing L1 to spike. Reducing weight keeps VGG as a texture guide without overpowering pixel-level alignment.
+09:38:05  
+09:38:05    [2026-03-24]  DECAY_START  30 → 10
+09:38:05             Reason: With LR now at 5e-5, decay should begin earlier so learning rate gradually reduces before the model plateaus.
+09:38:05  
+09:38:05    [2026-03-24]  PATIENCE  10 → 15
+09:38:05             Reason: Extra patience to give the model time to improve under the lower LR.
+09:38:05  
+09:38:05    [2026-03-24]  MIN_DELTA  1e-4 → 5e-5
+09:38:05             Reason: Finer improvement threshold to match the slower, more stable convergence at 5e-5 LR.
+09:38:05  
+09:38:05    [2026-03-24]  NUM_WORKERS  2 → 4
+09:38:05             Reason: Training data moved to HDD (11k samples). 4 workers needed to prefetch and hide HDD random-read latency so GPU stays at 100% utilization.
+09:38:05  
+09:38:05    [2026-03-24]  LAMBDA_FLOW_REG  0 → 0.01
+09:38:05             Reason: Identity bias: penalizes non-zero flow (flow.pow(2).mean()). Prevents cloth from drifting unnecessarily — model defaults to no-warp unless forced by L1.
+09:38:05  
+09:38:05    [2026-03-24]  masked_warp  off → on
+09:38:05             Reason: Applied cloth_mask to warped cloth (warped = warped * warped_mask). Without this, background pixels leak into the warped output causing noise outside cloth region.
+09:38:05  
+09:38:05    [2026-03-24]  flow_scale  1.0 → 0.3
+09:38:05             Reason: WarpNet tanh output was ±1, grid also ±1, so total displacement could reach ±2 (full image). Cloth was flying off-screen producing blob/spike artifacts. Scaling tanh by 0.3 limits max displacement to 30% of image — enough for cloth stretching but prevents catastrophic deformation. Fixed in warp_model.py line 74.
+09:38:05  
+09:38:05    [2026-03-24]  grad_clip  none → 1.0
+09:38:05             Reason: Added gradient clipping (max_norm=1.0) to both warp and tryon. Prevents occasional large gradient updates from destabilizing training.
+09:38:05  
+09:38:05    [2026-03-24]  LAMBDA_TV  0 → 0.5
+09:38:05             Reason: WarpNet flow field was producing chaotic spike/blob artifacts (visible in col 4 of inference). No smoothness constraint meant flow could move pixels arbitrarily far. TV loss penalizes abrupt spatial changes in flow, forcing cloth to warp as a coherent shape.
+09:38:05  
+09:38:05    [2026-03-24]  LAMBDA_VGG_TRYON  0.1 → 0.4
+09:38:05             Reason: Inference showed TryOnNet ignoring cloth color/texture entirely — output matched original person not target cloth. Root cause: L1=0.1 VGG too weak to force texture transfer, model took L1 shortcut reconstructing original region. Higher VGG=0.4 forces perceptual similarity to target cloth.
+09:38:05  
+09:38:05    [2026-03-25]  LAMBDA_TV  0.5 → 0.0
+09:38:05             Reason: Inference showed warped cloth completely blank (gray) — WarpNet output near-zero flow. TV loss + flow_reg together were stronger than L1 signal, model learned to not warp at all. Disabled TV entirely so L1 is the only warp signal.
+09:38:05  
+09:38:05    [2026-03-25]  LAMBDA_FLOW_REG  0.01 → 0.0
+09:38:05             Reason: Same as TV — was compounding the no-warp bias. Disabled alongside TV.
+09:38:05  
+09:38:05    [2026-03-25]  flow_scale  0.3 → 0.5
+09:38:05             Reason: With TV/flow_reg removed, increase displacement budget so cloth can reach body region. 0.3 (30%) was too tight for clothes that need to stretch across the torso.
+09:38:05  
+09:38:05    [2026-03-25]  warp_loss_mask  warped*pcm → warped_raw*pcm
+09:38:05             Reason: Critical bug: loss was computed on warped*warped_mask*pcm (double masked). When warp is even slightly off, both masks don't overlap -> product ~0 -> zero gradient -> model stuck. Fix: compute loss on raw warp before applying warped_mask. Masked warp kept for TryOnNet input only.
+09:38:05  
+09:38:05    [2026-03-25]  WarpNet ngf  64 → 32
+09:38:05             Reason: Lighter model: 4x fewer params (~1.9M vs 7.5M), ~2x faster per epoch. Enough capacity for 5k samples. Frees time for a full retrain today.
+09:38:05  
+09:38:05    [2026-03-25]  TryOnNet ngf  64 → 32
+09:38:05             Reason: Lighter model: matches WarpNet size reduction. Still has U-Net skip connections for detail recovery. Faster training needed to finish today.
+09:38:05  
+09:38:05    [2026-03-25]  LAMBDA_MASK  0 → 5.0
+09:38:05             Reason: Root cause of WarpNet plateau: L1/VGG compared warped flat cloth RGB vs on-body cloth RGB. These can never match well due to wrinkles/shadows/body shape — L1 floors at ~0.14. Mask loss (warped_mask vs pcm) provides a clean geometric signal (binary shapes, no texture noise). Weight=5.0 makes this the dominant gradient source for spatial deformation learning.
+09:38:05  
+09:38:05    [2026-03-25]  WarpNet ngf  32 → 64
+09:38:05             Reason: Restored to original capacity. 32 was insufficient — model couldn't learn geometric warping with fewer params. 10.6M params needed for dense flow prediction.
+09:38:05  
+09:38:05  
+09:38:05  ============================================================
+09:38:05    WARPNET TRAINING  —  EPOCH LOG
+09:38:05  ============================================================
+09:38:05    Epoch       L1      VGG    SSIM     PSNR          LR      Time  Best L1  Status
+09:38:05    ─────  ───────  ───────  ──────  ───────  ──────────  ────────  ───────  ────────────────────
+09:39:00        1   0.1498   1.0484  0.7434    15.48    2.00e-04    0m 51s   0.1498  * NEW BEST *  [ckpt]
+09:39:35        2   0.1497   1.0455  0.7397    16.76    2.00e-04    0m 34s   0.1498  wait 1/20  [ckpt]
+09:40:12        3   0.1491   1.0429  0.7389    15.15    2.00e-04    0m 36s   0.1491  * NEW BEST *  [ckpt]
+09:40:48        4   0.1486   1.0386  0.7311    14.68    2.00e-04    0m 35s   0.1486  * NEW BEST *  [ckpt]
+09:41:24        5   0.1488   1.0372  0.7331    14.93    2.00e-04    0m 35s   0.1486  wait 1/20  [ckpt]
+09:42:00        6   0.1486   1.0347  0.7394    15.15    2.00e-04    0m 36s   0.1486  wait 2/20  [ckpt]
+09:42:37        7   0.1487   1.0291  0.7439    15.97    2.00e-04    0m 36s   0.1486  wait 3/20  [ckpt]
+09:43:14        8   0.1481   1.0261  0.7439    15.62    2.00e-04    0m 36s   0.1481  * NEW BEST *  [ckpt]
+09:43:51        9   0.1483   1.0230  0.7451    15.14    2.00e-04    0m 36s   0.1481  wait 1/20  [ckpt]
+09:44:27       10   0.1480   1.0227  0.7495    15.90    2.00e-04    0m 35s   0.1481  wait 2/20  [ckpt]
+09:45:03       11   0.1481   1.0204  0.7360    15.68    2.00e-04    0m 35s   0.1481  wait 3/20  [ckpt]
+09:45:39       12   0.1479   1.0195  0.7337    15.44    2.00e-04    0m 35s   0.1479  * NEW BEST *  [ckpt]
+09:46:15       13   0.1477   1.0174  0.7328    15.13    2.00e-04    0m 36s   0.1477  * NEW BEST *  [ckpt]
+09:46:52       14   0.1479   1.0210  0.7447    15.63    2.00e-04    0m 36s   0.1477  wait 1/20  [ckpt]
+09:47:28       15   0.1479   1.0150  0.7491    16.21    2.00e-04    0m 35s   0.1477  wait 2/20  [ckpt]
+09:48:04       16   0.1480   1.0166  0.7283    14.57    2.00e-04    0m 35s   0.1477  wait 3/20  [ckpt]
+09:48:40       17   0.1477   1.0141  0.7502    15.87    2.00e-04    0m 36s   0.1477  wait 4/20  [ckpt]
+09:49:16       18   0.1478   1.0151  0.7493    16.87    2.00e-04    0m 35s   0.1477  wait 5/20  [ckpt]
+09:49:53       19   0.1482   1.0150  0.7293    14.95    2.00e-04    0m 36s   0.1477  wait 6/20  [ckpt]
+09:50:28       20   0.1477   1.0138  0.7428    15.22    2.00e-04    0m 34s   0.1477  wait 7/20  [ckpt]
+09:51:03       21   0.1475   1.0100  0.7480    15.67    2.00e-04    0m 34s   0.1475  * NEW BEST *  [ckpt]
+09:51:38       22   0.1476   1.0124  0.7441    16.58    2.00e-04    0m 34s   0.1475  wait 1/20  [ckpt]
+09:52:13       23   0.1475   1.0075  0.7506    15.85    2.00e-04    0m 34s   0.1475  wait 2/20  [ckpt]
+09:52:49       24   0.1478   1.0088  0.7304    14.97    2.00e-04    0m 35s   0.1475  wait 3/20  [ckpt]
+09:53:25       25   0.1476   1.0066  0.7313    14.79    2.00e-04    0m 36s   0.1475  wait 4/20  [ckpt]
+09:54:02       26   0.1475   1.0087  0.7315    14.71    2.00e-04    0m 36s   0.1475  wait 5/20  [ckpt]
+09:54:38       27   0.1474   1.0086  0.7389    15.43    2.00e-04    0m 35s   0.1475  wait 6/20  [ckpt]
+09:55:15       28   0.1476   1.0080  0.7441    16.17    2.00e-04    0m 36s   0.1475  wait 7/20  [ckpt]
+09:55:51       29   0.1477   1.0061  0.7490    16.01    2.00e-04    0m 36s   0.1475  wait 8/20  [ckpt]
+09:56:27       30   0.1475   1.0061  0.7414    15.21    2.00e-04    0m 35s   0.1475  wait 9/20  [ckpt]
+09:57:04       31   0.1477   1.0046  0.7391    15.90    2.00e-04    0m 36s   0.1475  wait 10/20  [ckpt]
+09:57:41       32   0.1478   1.0070  0.7445    15.89    2.00e-04    0m 36s   0.1475  wait 11/20  [ckpt]
+09:58:17       33   0.1475   1.0046  0.7434    16.15    2.00e-04    0m 36s   0.1475  wait 12/20  [ckpt]
+09:58:53       34   0.1477   1.0062  0.7376    15.52    2.00e-04    0m 36s   0.1475  wait 13/20  [ckpt]
+09:59:29       35   0.1476   1.0049  0.7386    15.43    2.00e-04    0m 35s   0.1475  wait 14/20  [ckpt]
+10:00:06       36   0.1476   1.0051  0.7433    15.90    2.00e-04    0m 35s   0.1475  wait 15/20  [ckpt]
+10:00:42       37   0.1477   1.0029  0.7377    15.91    2.00e-04    0m 35s   0.1475  wait 16/20  [ckpt]
+10:01:18       38   0.1473   1.0044  0.7221    14.66    2.00e-04    0m 35s   0.1473  * NEW BEST *  [ckpt]
+10:01:54       39   0.1475   1.0031  0.7452    15.63    2.00e-04    0m 36s   0.1473  wait 1/20  [ckpt]
+10:02:30       40   0.1472   1.0000  0.7383    15.33    2.00e-04    0m 35s   0.1473  wait 2/20  [ckpt]
+10:03:06       41   0.1474   1.0007  0.7469    16.11    2.00e-04    0m 35s   0.1473  wait 3/20  [ckpt]
+10:03:43       42   0.1478   1.0032  0.7291    14.69    2.00e-04    0m 35s   0.1473  wait 4/20  [ckpt]
+10:04:19       43   0.1473   1.0005  0.7435    15.72    2.00e-04    0m 36s   0.1473  wait 5/20  [ckpt]
+10:04:56       44   0.1476   1.0021  0.7501    16.63    2.00e-04    0m 36s   0.1473  wait 6/20  [ckpt]
+10:05:32       45   0.1475   1.0020  0.7340    14.96    2.00e-04    0m 35s   0.1473  wait 7/20  [ckpt]
+10:06:08       46   0.1473   0.9977  0.7408    15.50    2.00e-04    0m 35s   0.1473  wait 8/20  [ckpt]
+10:06:44       47   0.1474   1.0001  0.7473    16.64    2.00e-04    0m 36s   0.1473  wait 9/20  [ckpt]
+10:07:20       48   0.1472   0.9970  0.7367    15.28    2.00e-04    0m 35s   0.1473  wait 10/20  [ckpt]
+10:07:57       49   0.1475   0.9992  0.7509    15.91    2.00e-04    0m 36s   0.1473  wait 11/20  [ckpt]
+10:08:34       50   0.1474   1.0007  0.7312    14.52    2.00e-04    0m 36s   0.1473  wait 12/20  [ckpt]
+10:09:09       51   0.1476   0.9992  0.7354    15.20    1.96e-04    0m 35s   0.1473  wait 13/20  [ckpt]
+10:09:45       52   0.1472   0.9982  0.7401    15.50    1.92e-04    0m 35s   0.1473  wait 14/20  [ckpt]
+10:10:22       53   0.1475   0.9977  0.7373    16.15    1.88e-04    0m 35s   0.1473  wait 15/20  [ckpt]
+10:10:58       54   0.1474   0.9989  0.7412    15.48    1.84e-04    0m 35s   0.1473  wait 16/20  [ckpt]
+10:11:34       55   0.1478   1.0008  0.7528    16.21    1.80e-04    0m 35s   0.1473  wait 17/20  [ckpt]
+10:12:10       56   0.1476   0.9976  0.7455    15.98    1.76e-04    0m 36s   0.1473  wait 18/20  [ckpt]
+10:12:46       57   0.1476   0.9948  0.7305    15.11    1.72e-04    0m 35s   0.1473  wait 19/20  [ckpt]
+10:13:22       58   0.1476   0.9964  0.7470    16.06    1.68e-04    0m 35s   0.1473  wait 20/20  [ckpt]
+10:13:22  
+  >> Early stopping triggered at epoch 58.
+10:13:22  ============================================================
+10:13:22    WARPNET TRAINING  —  FINAL SUMMARY
+10:13:22  ============================================================
+10:13:22    Total epochs trained : 58
+10:13:22    Best L1 loss         : 0.1473  (epoch 38)
+10:13:22    Total training time  : 35m 16s
+10:13:22    Best checkpoint      : C:\Virtual_try_on\checkpoints/warp_best.pth
+10:13:22    CSV metrics log      : C:\Virtual_try_on\logs/warp_metrics.csv
+10:13:22  

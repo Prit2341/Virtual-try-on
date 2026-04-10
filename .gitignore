@@ -7,8 +7,11 @@ results/
 # ── Model checkpoints ──────────────────────────────────────────────────────────
 checkpoints/
 
-# ── TensorBoard logs ───────────────────────────────────────────────────────────
-logs/
+# ── TensorBoard logs (binary event files) ─────────────────────────────────────
+logs/*/
+# Allow human-readable training logs and metrics CSVs
+!logs/*.txt
+!logs/*.csv
 
 # ── Python virtual environment ─────────────────────────────────────────────────
 venv/

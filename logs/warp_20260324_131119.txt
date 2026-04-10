@@ -1,0 +1,51 @@
+13:11:19  Log file: C:\Virtual_try_on\logs\warp_20260324_131119.txt
+13:11:19  ============================================================
+13:11:19    WARPNET TRAINING  —  CONFIGURATION
+13:11:19  ============================================================
+13:11:19    Stage          : warp
+13:11:19    Device         : cuda
+13:11:19    GPU            : NVIDIA GeForce RTX 4070
+13:11:19    VRAM           : 12.9 GB
+13:11:19    Dataset        : 11647 samples  (D:/Virtual_try_on/dataset/train/tensors)
+13:11:19    Batches/epoch  : 727
+13:11:19    Batch size     : 16
+13:11:19    Learning rate  : 5e-05
+13:11:19    LR decay start : epoch 10
+13:11:19    AMP (fp16)     : True
+13:11:19    Lambda L1      : 1.0
+13:11:19    Lambda VGG     : 0.1
+13:11:19    Max epochs     : 100
+13:11:19    Early stop     : patience=15, min_delta=5e-05
+13:11:19    Resume from    : checkpoints/warp_best.pth
+13:11:19  
+13:11:19    Free disk space    : 23.44 GB
+13:11:19  
+13:11:19  ============================================================
+13:11:19    HYPERPARAMETER CHANGE LOG
+13:11:19  ============================================================
+13:11:19    [2026-03-24]  LR  2e-4 → 5e-5
+13:11:19             Reason: Model diverged after epoch 7 — loss jumped from 0.141 to 0.177. Lower LR prevents gradient instability after initial fast convergence.
+13:11:19  
+13:11:19    [2026-03-24]  LAMBDA_VGG  0.5 → 0.1
+13:11:19             Reason: VGG perceptual loss was competing with L1 and causing L1 to spike. Reducing weight keeps VGG as a texture guide without overpowering pixel-level alignment.
+13:11:19  
+13:11:19    [2026-03-24]  DECAY_START  30 → 10
+13:11:19             Reason: With LR now at 5e-5, decay should begin earlier so learning rate gradually reduces before the model plateaus.
+13:11:19  
+13:11:19    [2026-03-24]  PATIENCE  10 → 15
+13:11:19             Reason: Extra patience to give the model time to improve under the lower LR.
+13:11:19  
+13:11:19    [2026-03-24]  MIN_DELTA  1e-4 → 5e-5
+13:11:19             Reason: Finer improvement threshold to match the slower, more stable convergence at 5e-5 LR.
+13:11:19  
+13:11:19    [2026-03-24]  NUM_WORKERS  2 → 4
+13:11:19             Reason: Training data moved to HDD (11k samples). 4 workers needed to prefetch and hide HDD random-read latency so GPU stays at 100% utilization.
+13:11:19  
+13:11:19  
+13:11:20  Resumed from epoch 15
+
+13:11:20  ============================================================
+13:11:20    WARPNET TRAINING  —  EPOCH LOG
+13:11:20  ============================================================
+13:11:20     Epoch    Avg L1    Avg VGG          LR   Epoch Time   Best L1  Status
+13:11:20    ------  --------  ---------  ----------  -----------  --------  --------------------
