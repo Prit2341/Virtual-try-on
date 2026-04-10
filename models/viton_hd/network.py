@@ -63,18 +63,20 @@ GRID_SIZE = 5    # TPS control-point grid
 def remap_parse_18_to_7(parse_map: torch.Tensor) -> torch.Tensor:
     """
     Map integer parse map (B,H,W) or (H,W) with values 0-17 → 0-6.
+    Values outside [0, 17] are clamped to background (0) before mapping.
     Works on CPU or CUDA.
     """
     lut = _MAP_TENSOR.to(parse_map.device)
-    return lut[parse_map.long()]
+    return lut[parse_map.long().clamp(0, N_PARSE - 1)]
 
 
 def make_parse_agnostic_onehot(parse_map: torch.Tensor) -> torch.Tensor:
     """
     From integer parse map (B,H,W) produce one-hot (B, N_PARSE, H, W)
     with clothing labels (4, 7, 17) zeroed out.
+    Values outside [0, 17] are clamped to 0 (background).
     """
-    p = parse_map.long().clone()
+    p = parse_map.long().clamp(0, N_PARSE - 1).clone()
     for lbl in AGNOSTIC_REMOVE:
         p[p == lbl] = 0
     # one-hot: (B,H,W) → (B,N_PARSE,H,W)
@@ -191,7 +193,7 @@ class SegGenerator(nn.Module):
         d3 = self.dec3(torch.cat([c3, self.up3(d4)], 1))  #  64× 48
         d2 = self.dec2(torch.cat([c2, self.up2(d3)], 1))  # 128× 96
         d1 = self.dec1(torch.cat([c1, self.up1(d2)], 1))  # 256×192
-        return torch.sigmoid(d1)
+        return d1   # raw logits — use BCEWithLogitsLoss; apply sigmoid externally when needed
 
 
 # ---------------------------------------------------------------------------

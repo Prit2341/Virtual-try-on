@@ -84,16 +84,15 @@ MODELS = {
 
 # Optimal batch sizes from find_optimal_batch.py (RTX 4000 Ada 20 GB, AMP fp16)
 BATCH_SIZES = {
-    # Reduced from benchmarked values to avoid OOM with new/heavier models.
-    # CNN-Based baseline uses ngf=32 (lighter), others use ngf=64.
-    "baseline":       48,  # CNN-Based ngf=32 — no VGG, safe at 48
-    "v2":             32,  # GMM+TPS+VGG — 32 keeps VRAM comfortable
-    "resnet_gen":     32,  # same architecture as v2 warp stage
-    "attention_unet": 64,  # attention adds overhead vs plain baseline
-    "single_stage":   48,  # 5-level U-Net + VGG — 48 is safe
-    "spade":          48,  # SPADE norm + VGG overhead
-    "multiscale":     64,  # refine stage is lighter than full VGG pass
-    "viton_hd":       16,  # ALIAS generator is heaviest — 16 to be safe
+    # Tuned for RTX 4000 Ada 20 GB — GPU at 100% compute, VRAM ~70-80% target.
+    "baseline":       96,  # CNN-Based ngf=32, no VGG — light, can push high
+    "v2":             48,  # GMM+TPS+VGG — correlation layer adds memory
+    "resnet_gen":     48,  # same architecture as v2
+    "attention_unet": 96,  # attention overhead but 20 GB handles it
+    "single_stage":   64,  # 5-level U-Net + VGG
+    "spade":          64,  # SPADE norm + VGG
+    "multiscale":     80,  # coarse+refine dual-stage
+    "viton_hd":       24,  # ALIAS is heaviest — 3-stage pipeline
 }
 
 # ---------------------------------------------------------------------------

@@ -103,7 +103,7 @@ def train_seg(args, logger):
     model  = SegGenerator(input_nc=41, output_nc=N_SEG).to(DEVICE)
     opt    = torch.optim.Adam(model.parameters(), lr=args.lr, betas=(0.5, 0.999))
     scaler = GradScaler(enabled=(DEVICE == "cuda"))
-    bce    = nn.BCELoss()
+    bce    = nn.BCEWithLogitsLoss()   # AMP-safe: takes raw logits, applies sigmoid internally
 
     best, no_imp, best_path = float("inf"), 0, ckpt_dir / "seg_best.pth"
 
@@ -188,9 +188,9 @@ def train_gmm(args, logger):
 
             with torch.no_grad():
                 seg_inp  = _make_seg_input(cm, cl, pm, pose)
-                seg_pred = seg_net(seg_inp)                 # (B,7,H,W)  sigmoid
+                seg_pred  = torch.sigmoid(seg_net(seg_inp))  # (B,7,H,W) logits → probs
                 # cloth channel in 7-class: index 2
-                seg_cloth = seg_pred[:, 2:3]               # (B,1,H,W)
+                seg_cloth = seg_pred[:, 2:3]                 # (B,1,H,W)
 
             # GMM inputA: seg_cloth(1) + pose(18) + agnostic(3)
             inp_A = torch.cat([seg_cloth, pose, ag], dim=1)   # 22ch
@@ -301,7 +301,7 @@ def train_alias(args, logger):
             with torch.no_grad():
                 # Segmentation prediction
                 seg_inp  = _make_seg_input(cm, cl, pm, pose)
-                seg_pred = seg_net(seg_inp)                    # (B,7,H,W) sigmoid
+                seg_pred = torch.sigmoid(seg_net(seg_inp))     # (B,7,H,W) logits → probs
                 seg_hard = (seg_pred > 0.5).float()            # binarise
                 seg_cloth = seg_hard[:, 2:3]                   # upper-cloth channel
 

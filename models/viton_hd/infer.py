@@ -75,7 +75,7 @@ def run_inference(args: argparse.Namespace) -> None:
         parse_ag = make_parse_agnostic_onehot(pm)
         cl_masked = cl * cm
         seg_inp  = torch.cat([cm, cl_masked, parse_ag, pose, noise], dim=1)
-        seg_pred = seg(seg_inp)
+        seg_pred = torch.sigmoid(seg(seg_inp))   # logits → probs
         seg_hard = (seg_pred > 0.5).float()
         seg_cloth = seg_hard[:, 2:3]
 
