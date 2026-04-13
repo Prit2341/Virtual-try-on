@@ -80,6 +80,24 @@ MODELS = {
         "args":   ["--stage", "all"],
         "label":  "VITON-HD (SegGen + GMM/TPS + ALIAS)",
     },
+    "cp_viton": {
+        "script": "models/cp_viton/train.py",
+        "ckpt":   "checkpoints/cp_viton/tom_best.pth",
+        "args":   ["--stage", "both"],
+        "label":  "CP-VITON (GMM TPS + TOM + PatchGAN adversarial)",
+    },
+    "pfafn": {
+        "script": "models/pfafn/train.py",
+        "ckpt":   "checkpoints/pfafn/cfn_best.pth",
+        "args":   ["--stage", "both"],
+        "label":  "PF-AFN (Parser-Free dense appearance flow)",
+    },
+    "multiscale_gan": {
+        "script": "models/multiscale_gan/train.py",
+        "ckpt":   "checkpoints/multiscale_gan/refine_best.pth",
+        "args":   ["--stage", "both"],
+        "label":  "Multiscale GAN (CoarseNet + RefineNet + PatchGAN)",
+    },
 }
 
 # Optimal batch sizes from find_optimal_batch.py (RTX 4000 Ada 20 GB, AMP fp16)
@@ -93,6 +111,9 @@ BATCH_SIZES = {
     "spade":          64,  # SPADE norm + VGG
     "multiscale":     80,  # coarse+refine dual-stage
     "viton_hd":       24,  # ALIAS is heaviest — 3-stage pipeline
+    "cp_viton":       40,  # GMM + TOM + PatchGAN discriminator
+    "pfafn":          48,  # Appearance flow encoder + fusion U-Net
+    "multiscale_gan": 56,  # CoarseNet + RefineNet + discriminator (2 backward passes)
 }
 
 # ---------------------------------------------------------------------------
