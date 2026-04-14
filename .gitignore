@@ -1,11 +1,22 @@
 # ── Dataset ────────────────────────────────────────────────────────────────────
 dataset/
+archive/
+archive.zip
+results/
+
+# ── Archives ───────────────────────────────────────────────────────────────────
+*.zip
+*.tar.gz
+*.tar
 
 # ── Model checkpoints ──────────────────────────────────────────────────────────
 checkpoints/
 
-# ── TensorBoard logs ───────────────────────────────────────────────────────────
-logs/
+# ── TensorBoard logs (binary event files) ─────────────────────────────────────
+logs/*/
+# Allow human-readable training logs and metrics CSVs
+!logs/*.txt
+!logs/*.csv
 
 # ── Python virtual environment ─────────────────────────────────────────────────
 venv/
@@ -29,6 +40,9 @@ __pycache__/
 
 # ── HuggingFace / torch cache ─────────────────────────────────────────────────
 .cache/
+
+# ── Project-specific exclusions ───────────────────────────────────────────────
+NNDL Report.pdf
 
 # ── OS junk ───────────────────────────────────────────────────────────────────
 .DS_Store

@@ -1,0 +1,201 @@
+16:23:46  Log file: C:\Virtual_try_on\logs\tryon_20260406_162346.txt
+16:23:46  ============================================================
+16:23:46    TRYONNET TRAINING  —  CONFIGURATION
+16:23:46  ============================================================
+16:23:46    Stage          : tryon
+16:23:46    Device         : cuda
+16:23:46    GPU            : NVIDIA RTX 4000 Ada Generation
+16:23:46    VRAM           : 21.5 GB
+16:23:46    Dataset        : 5000 samples  (C:\Virtual_try_on\dataset\train\tensors)
+16:23:46    Batches/epoch  : 44
+16:23:46    Batch size     : 112
+16:23:46    Learning rate  : 0.0002
+16:23:46    LR decay start : epoch 50
+16:23:46    AMP (fp16)     : True
+16:23:46    Lambda L1      : 1.0
+16:23:46    Lambda VGG     : 1.0
+16:23:46    Max epochs     : 100
+16:23:46    Early stop     : patience=20, min_delta=0.0001
+16:23:46    WarpNet ckpt   : C:\Virtual_try_on\checkpoints\warp_best.pth
+16:23:46  
+16:23:46  Loaded WarpNet: C:\Virtual_try_on\checkpoints\warp_best.pth
+16:23:46    Free disk space    : 724.25 GB
+16:23:46  
+16:23:46  ============================================================
+16:23:46    HYPERPARAMETER CHANGE LOG
+16:23:46  ============================================================
+16:23:46    [2026-03-24]  LR  2e-4 → 5e-5
+16:23:46             Reason: Model diverged after epoch 7 — loss jumped from 0.141 to 0.177. Lower LR prevents gradient instability after initial fast convergence.
+16:23:46  
+16:23:46    [2026-03-24]  LAMBDA_VGG  0.5 → 0.1
+16:23:46             Reason: VGG perceptual loss was competing with L1 and causing L1 to spike. Reducing weight keeps VGG as a texture guide without overpowering pixel-level alignment.
+16:23:46  
+16:23:46    [2026-03-24]  DECAY_START  30 → 10
+16:23:46             Reason: With LR now at 5e-5, decay should begin earlier so learning rate gradually reduces before the model plateaus.
+16:23:46  
+16:23:46    [2026-03-24]  PATIENCE  10 → 15
+16:23:46             Reason: Extra patience to give the model time to improve under the lower LR.
+16:23:46  
+16:23:46    [2026-03-24]  MIN_DELTA  1e-4 → 5e-5
+16:23:46             Reason: Finer improvement threshold to match the slower, more stable convergence at 5e-5 LR.
+16:23:46  
+16:23:46    [2026-03-24]  NUM_WORKERS  2 → 4
+16:23:46             Reason: Training data moved to HDD (11k samples). 4 workers needed to prefetch and hide HDD random-read latency so GPU stays at 100% utilization.
+16:23:46  
+16:23:46    [2026-03-24]  LAMBDA_FLOW_REG  0 → 0.01
+16:23:46             Reason: Identity bias: penalizes non-zero flow (flow.pow(2).mean()). Prevents cloth from drifting unnecessarily — model defaults to no-warp unless forced by L1.
+16:23:46  
+16:23:46    [2026-03-24]  masked_warp  off → on
+16:23:46             Reason: Applied cloth_mask to warped cloth (warped = warped * warped_mask). Without this, background pixels leak into the warped output causing noise outside cloth region.
+16:23:46  
+16:23:46    [2026-03-24]  flow_scale  1.0 → 0.3
+16:23:46             Reason: WarpNet tanh output was ±1, grid also ±1, so total displacement could reach ±2 (full image). Cloth was flying off-screen producing blob/spike artifacts. Scaling tanh by 0.3 limits max displacement to 30% of image — enough for cloth stretching but prevents catastrophic deformation. Fixed in warp_model.py line 74.
+16:23:46  
+16:23:46    [2026-03-24]  grad_clip  none → 1.0
+16:23:46             Reason: Added gradient clipping (max_norm=1.0) to both warp and tryon. Prevents occasional large gradient updates from destabilizing training.
+16:23:46  
+16:23:46    [2026-03-24]  LAMBDA_TV  0 → 0.5
+16:23:46             Reason: WarpNet flow field was producing chaotic spike/blob artifacts (visible in col 4 of inference). No smoothness constraint meant flow could move pixels arbitrarily far. TV loss penalizes abrupt spatial changes in flow, forcing cloth to warp as a coherent shape.
+16:23:46  
+16:23:46    [2026-03-24]  LAMBDA_VGG_TRYON  0.1 → 0.4
+16:23:46             Reason: Inference showed TryOnNet ignoring cloth color/texture entirely — output matched original person not target cloth. Root cause: L1=0.1 VGG too weak to force texture transfer, model took L1 shortcut reconstructing original region. Higher VGG=0.4 forces perceptual similarity to target cloth.
+16:23:46  
+16:23:46    [2026-03-25]  LAMBDA_TV  0.5 → 0.0
+16:23:46             Reason: Inference showed warped cloth completely blank (gray) — WarpNet output near-zero flow. TV loss + flow_reg together were stronger than L1 signal, model learned to not warp at all. Disabled TV entirely so L1 is the only warp signal.
+16:23:46  
+16:23:46    [2026-03-25]  LAMBDA_FLOW_REG  0.01 → 0.0
+16:23:46             Reason: Same as TV — was compounding the no-warp bias. Disabled alongside TV.
+16:23:46  
+16:23:46    [2026-03-25]  flow_scale  0.3 → 0.5
+16:23:46             Reason: With TV/flow_reg removed, increase displacement budget so cloth can reach body region. 0.3 (30%) was too tight for clothes that need to stretch across the torso.
+16:23:46  
+16:23:46    [2026-03-25]  warp_loss_mask  warped*pcm → warped_raw*pcm
+16:23:46             Reason: Critical bug: loss was computed on warped*warped_mask*pcm (double masked). When warp is even slightly off, both masks don't overlap -> product ~0 -> zero gradient -> model stuck. Fix: compute loss on raw warp before applying warped_mask. Masked warp kept for TryOnNet input only.
+16:23:46  
+16:23:46    [2026-03-25]  WarpNet ngf  64 → 32
+16:23:46             Reason: Lighter model: 4x fewer params (~1.9M vs 7.5M), ~2x faster per epoch. Enough capacity for 5k samples. Frees time for a full retrain today.
+16:23:46  
+16:23:46    [2026-03-25]  TryOnNet ngf  64 → 32
+16:23:46             Reason: Lighter model: matches WarpNet size reduction. Still has U-Net skip connections for detail recovery. Faster training needed to finish today.
+16:23:46  
+16:23:46    [2026-03-25]  LAMBDA_MASK  0 → 5.0
+16:23:46             Reason: Root cause of WarpNet plateau: L1/VGG compared warped flat cloth RGB vs on-body cloth RGB. These can never match well due to wrinkles/shadows/body shape — L1 floors at ~0.14. Mask loss (warped_mask vs pcm) provides a clean geometric signal (binary shapes, no texture noise). Weight=5.0 makes this the dominant gradient source for spatial deformation learning.
+16:23:46  
+16:23:46    [2026-03-25]  WarpNet ngf  32 → 64
+16:23:46             Reason: Restored to original capacity. 32 was insufficient — model couldn't learn geometric warping with fewer params. 10.6M params needed for dense flow prediction.
+16:23:46  
+16:23:46  
+16:23:47  ============================================================
+16:23:47    TRYONNET TRAINING  —  EPOCH LOG
+16:23:47  ============================================================
+16:23:47    Epoch       L1      VGG    SSIM     PSNR          LR      Time  Best L1  Status
+16:23:47    ─────  ───────  ───────  ──────  ───────  ──────────  ────────  ───────  ────────────────────
+16:24:41        1   0.6525   2.5571  0.0419     9.84    2.00e-04    0m 53s   0.6525  * NEW BEST *  [ckpt]
+16:25:24        2   0.5948   2.3336  0.1194    10.76    2.00e-04    0m 42s   0.5948  * NEW BEST *  [ckpt]
+16:26:08        3   0.4821   2.3076  0.2265    12.66    2.00e-04    0m 43s   0.4821  * NEW BEST *  [ckpt]
+16:26:51        4   0.2937   2.2717  0.4351    14.70    2.00e-04    0m 43s   0.2937  * NEW BEST *  [ckpt]
+16:27:35        5   0.2273   2.0906  0.5507    15.17    2.00e-04    0m 44s   0.2273  * NEW BEST *  [ckpt]
+16:28:20        6   0.2165   1.9233  0.6115    15.47    2.00e-04    0m 44s   0.2165  * NEW BEST *  [ckpt]
+16:29:04        7   0.2144   1.8691  0.6259    15.50    2.00e-04    0m 43s   0.2144  * NEW BEST *  [ckpt]
+16:29:47        8   0.2107   1.8298  0.6178    15.46    2.00e-04    0m 43s   0.2107  * NEW BEST *  [ckpt]
+16:30:31        9   0.2096   1.7849  0.6078    15.14    2.00e-04    0m 42s   0.2096  * NEW BEST *  [ckpt]
+16:31:14       10   0.2037   1.7297  0.6522    15.60    2.00e-04    0m 43s   0.2037  * NEW BEST *  [ckpt]
+16:31:58       11   0.2030   1.7228  0.6416    15.99    2.00e-04    0m 43s   0.2030  * NEW BEST *  [ckpt]
+16:32:41       12   0.1998   1.6890  0.6622    15.94    2.00e-04    0m 42s   0.1998  * NEW BEST *  [ckpt]
+16:33:25       13   0.1982   1.6786  0.6443    15.27    2.00e-04    0m 43s   0.1982  * NEW BEST *  [ckpt]
+16:34:09       14   0.1970   1.6585  0.6617    15.39    2.00e-04    0m 43s   0.1970  * NEW BEST *  [ckpt]
+16:34:52       15   0.1970   1.6580  0.6495    15.30    2.00e-04    0m 43s   0.1970  wait 1/20  [ckpt]
+16:35:36       16   0.1933   1.6363  0.6713    15.50    2.00e-04    0m 43s   0.1933  * NEW BEST *  [ckpt]
+16:36:20       17   0.1938   1.6243  0.6794    15.89    2.00e-04    0m 43s   0.1933  wait 1/20  [ckpt]
+16:37:03       18   0.1900   1.5995  0.6903    16.10    2.00e-04    0m 43s   0.1900  * NEW BEST *  [ckpt]
+16:37:47       19   0.1914   1.6113  0.6955    16.20    2.00e-04    0m 43s   0.1900  wait 1/20  [ckpt]
+16:38:30       20   0.1887   1.5895  0.6850    15.79    2.00e-04    0m 42s   0.1887  * NEW BEST *  [ckpt]
+16:39:14       21   0.1864   1.5753  0.6876    16.21    2.00e-04    0m 43s   0.1864  * NEW BEST *  [ckpt]
+16:39:58       22   0.1854   1.5643  0.7027    16.25    2.00e-04    0m 43s   0.1854  * NEW BEST *  [ckpt]
+16:40:41       23   0.1859   1.5714  0.6856    16.17    2.00e-04    0m 43s   0.1854  wait 1/20  [ckpt]
+16:41:25       24   0.1832   1.5495  0.6679    16.23    2.00e-04    0m 43s   0.1832  * NEW BEST *  [ckpt]
+16:42:08       25   0.1833   1.5545  0.7147    16.65    2.00e-04    0m 43s   0.1832  wait 1/20  [ckpt]
+16:42:52       26   0.1832   1.5488  0.7085    16.65    2.00e-04    0m 43s   0.1832  wait 2/20  [ckpt]
+16:43:36       27   0.1806   1.5322  0.6996    15.99    2.00e-04    0m 43s   0.1806  * NEW BEST *  [ckpt]
+16:44:20       28   0.1793   1.5250  0.7107    16.63    2.00e-04    0m 42s   0.1793  * NEW BEST *  [ckpt]
+16:45:04       29   0.1822   1.5783  0.6882    16.26    2.00e-04    0m 43s   0.1793  wait 1/20  [ckpt]
+16:45:47       30   0.1807   1.5351  0.6974    15.91    2.00e-04    0m 43s   0.1793  wait 2/20  [ckpt]
+16:46:31       31   0.1783   1.5159  0.6918    16.45    2.00e-04    0m 43s   0.1783  * NEW BEST *  [ckpt]
+16:47:15       32   0.1767   1.5069  0.6913    15.74    2.00e-04    0m 43s   0.1767  * NEW BEST *  [ckpt]
+16:47:59       33   0.1754   1.5013  0.7150    16.30    2.00e-04    0m 43s   0.1754  * NEW BEST *  [ckpt]
+16:48:42       34   0.1753   1.5053  0.7203    16.05    2.00e-04    0m 43s   0.1754  wait 1/20  [ckpt]
+16:49:26       35   0.1744   1.4985  0.7050    16.14    2.00e-04    0m 42s   0.1744  * NEW BEST *  [ckpt]
+16:50:10       36   0.1746   1.4953  0.6900    16.01    2.00e-04    0m 43s   0.1744  wait 1/20  [ckpt]
+16:50:53       37   0.1739   1.5049  0.7131    16.40    2.00e-04    0m 43s   0.1739  * NEW BEST *  [ckpt]
+16:51:37       38   0.1731   1.4806  0.7209    16.60    2.00e-04    0m 43s   0.1731  * NEW BEST *  [ckpt]
+16:52:21       39   0.1718   1.4777  0.7145    16.17    2.00e-04    0m 43s   0.1718  * NEW BEST *  [ckpt]
+16:53:05       40   0.1696   1.4664  0.7103    16.13    2.00e-04    0m 43s   0.1696  * NEW BEST *  [ckpt]
+16:53:49       41   0.1697   1.4694  0.7173    16.32    2.00e-04    0m 43s   0.1696  wait 1/20  [ckpt]
+16:54:32       42   0.1701   1.4840  0.6727    15.82    2.00e-04    0m 42s   0.1696  wait 2/20  [ckpt]
+16:55:15       43   0.1724   1.5067  0.7384    16.60    2.00e-04    0m 42s   0.1696  wait 3/20  [ckpt]
+16:55:59       44   0.1706   1.4791  0.7326    16.51    2.00e-04    0m 43s   0.1696  wait 4/20  [ckpt]
+16:56:53       45   0.1677   1.4600  0.7224    16.00    2.00e-04    0m 53s   0.1677  * NEW BEST *  [ckpt]
+16:57:36       46   0.1680   1.4560  0.7178    16.26    2.00e-04    0m 42s   0.1677  wait 1/20  [ckpt]
+16:58:20       47   0.1669   1.4563  0.7079    16.18    2.00e-04    0m 43s   0.1669  * NEW BEST *  [ckpt]
+16:59:03       48   0.1660   1.4484  0.7163    16.03    2.00e-04    0m 43s   0.1660  * NEW BEST *  [ckpt]
+16:59:46       49   0.1658   1.4548  0.7209    16.93    2.00e-04    0m 42s   0.1658  * NEW BEST *  [ckpt]
+17:00:29       50   0.1671   1.4602  0.7208    16.20    2.00e-04    0m 42s   0.1658  wait 1/20  [ckpt]
+17:01:13       51   0.1649   1.4420  0.7158    16.54    1.96e-04    0m 43s   0.1649  * NEW BEST *  [ckpt]
+17:01:57       52   0.1650   1.4448  0.6893    16.62    1.92e-04    0m 43s   0.1649  wait 1/20  [ckpt]
+17:02:40       53   0.1642   1.4352  0.7236    16.59    1.88e-04    0m 42s   0.1642  * NEW BEST *  [ckpt]
+17:03:24       54   0.1631   1.4337  0.7487    17.07    1.84e-04    0m 43s   0.1631  * NEW BEST *  [ckpt]
+17:04:08       55   0.1613   1.4258  0.7357    16.72    1.80e-04    0m 43s   0.1613  * NEW BEST *  [ckpt]
+17:04:51       56   0.1612   1.4250  0.7184    16.28    1.76e-04    0m 42s   0.1613  wait 1/20  [ckpt]
+17:05:35       57   0.1606   1.4216  0.7389    16.80    1.72e-04    0m 43s   0.1606  * NEW BEST *  [ckpt]
+17:06:19       58   0.1615   1.4236  0.7348    16.82    1.68e-04    0m 43s   0.1606  wait 1/20  [ckpt]
+17:07:02       59   0.1590   1.4116  0.7414    16.78    1.64e-04    0m 42s   0.1590  * NEW BEST *  [ckpt]
+17:07:45       60   0.1587   1.4183  0.7283    16.41    1.60e-04    0m 43s   0.1587  * NEW BEST *  [ckpt]
+17:08:29       61   0.1575   1.4158  0.7201    16.38    1.56e-04    0m 43s   0.1575  * NEW BEST *  [ckpt]
+17:09:13       62   0.1576   1.4065  0.7472    16.85    1.52e-04    0m 43s   0.1575  wait 1/20  [ckpt]
+17:09:56       63   0.1559   1.4006  0.7484    16.73    1.48e-04    0m 42s   0.1559  * NEW BEST *  [ckpt]
+17:10:40       64   0.1552   1.3998  0.7331    16.47    1.44e-04    0m 43s   0.1552  * NEW BEST *  [ckpt]
+17:11:24       65   0.1555   1.3990  0.7428    17.02    1.40e-04    0m 43s   0.1552  wait 1/20  [ckpt]
+17:12:07       66   0.1548   1.3966  0.7197    16.90    1.36e-04    0m 43s   0.1548  * NEW BEST *  [ckpt]
+17:12:51       67   0.1534   1.3935  0.7484    16.93    1.32e-04    0m 43s   0.1534  * NEW BEST *  [ckpt]
+17:13:34       68   0.1524   1.3880  0.7561    17.02    1.28e-04    0m 43s   0.1524  * NEW BEST *  [ckpt]
+17:14:17       69   0.1521   1.3894  0.7491    17.34    1.24e-04    0m 43s   0.1521  * NEW BEST *  [ckpt]
+17:15:02       70   0.1518   1.3864  0.7524    17.16    1.20e-04    0m 44s   0.1518  * NEW BEST *  [ckpt]
+17:15:45       71   0.1509   1.3822  0.7540    17.45    1.16e-04    0m 43s   0.1509  * NEW BEST *  [ckpt]
+17:16:28       72   0.1500   1.3802  0.7516    16.83    1.12e-04    0m 43s   0.1500  * NEW BEST *  [ckpt]
+17:17:12       73   0.1498   1.3791  0.7382    16.54    1.08e-04    0m 43s   0.1498  * NEW BEST *  [ckpt]
+17:17:55       74   0.1502   1.3854  0.7318    16.94    1.04e-04    0m 43s   0.1498  wait 1/20  [ckpt]
+17:18:39       75   0.1484   1.3739  0.7524    17.10    1.00e-04    0m 43s   0.1484  * NEW BEST *  [ckpt]
+17:19:22       76   0.1474   1.3708  0.7529    17.23    9.60e-05    0m 42s   0.1474  * NEW BEST *  [ckpt]
+17:20:06       77   0.1464   1.3717  0.7453    17.02    9.20e-05    0m 43s   0.1464  * NEW BEST *  [ckpt]
+17:20:50       78   0.1462   1.3690  0.7374    16.82    8.80e-05    0m 43s   0.1462  * NEW BEST *  [ckpt]
+17:21:33       79   0.1453   1.3661  0.7554    17.30    8.40e-05    0m 43s   0.1453  * NEW BEST *  [ckpt]
+17:22:16       80   0.1449   1.3637  0.7652    17.55    8.00e-05    0m 43s   0.1449  * NEW BEST *  [ckpt]
+17:23:00       81   0.1438   1.3629  0.7491    17.20    7.60e-05    0m 43s   0.1438  * NEW BEST *  [ckpt]
+17:23:43       82   0.1431   1.3610  0.7453    16.96    7.20e-05    0m 43s   0.1431  * NEW BEST *  [ckpt]
+17:24:27       83   0.1430   1.3624  0.7511    17.13    6.80e-05    0m 43s   0.1430  * NEW BEST *  [ckpt]
+17:25:11       84   0.1414   1.3588  0.7447    17.17    6.40e-05    0m 43s   0.1414  * NEW BEST *  [ckpt]
+17:25:56       85   0.1403   1.3573  0.7643    17.36    6.00e-05    0m 43s   0.1403  * NEW BEST *  [ckpt]
+17:26:39       86   0.1396   1.3562  0.7509    17.47    5.60e-05    0m 43s   0.1396  * NEW BEST *  [ckpt]
+17:27:23       87   0.1395   1.3547  0.7615    17.49    5.20e-05    0m 44s   0.1395  * NEW BEST *  [ckpt]
+17:28:06       88   0.1386   1.3533  0.7539    17.37    4.80e-05    0m 42s   0.1386  * NEW BEST *  [ckpt]
+17:28:50       89   0.1387   1.3527  0.7560    17.69    4.40e-05    0m 43s   0.1386  wait 1/20  [ckpt]
+17:29:34       90   0.1367   1.3487  0.7619    17.23    4.00e-05    0m 43s   0.1367  * NEW BEST *  [ckpt]
+17:30:18       91   0.1359   1.3503  0.7582    17.43    3.60e-05    0m 43s   0.1359  * NEW BEST *  [ckpt]
+17:31:01       92   0.1349   1.3490  0.7558    17.35    3.20e-05    0m 43s   0.1349  * NEW BEST *  [ckpt]
+17:31:45       93   0.1343   1.3488  0.7692    17.96    2.80e-05    0m 43s   0.1343  * NEW BEST *  [ckpt]
+17:32:29       94   0.1330   1.3465  0.7616    17.50    2.40e-05    0m 43s   0.1330  * NEW BEST *  [ckpt]
+17:33:12       95   0.1321   1.3453  0.7507    17.30    2.00e-05    0m 42s   0.1321  * NEW BEST *  [ckpt]
+17:33:56       96   0.1309   1.3436  0.7623    17.64    1.60e-05    0m 43s   0.1309  * NEW BEST *  [ckpt]
+17:34:40       97   0.1297   1.3414  0.7547    17.78    1.20e-05    0m 44s   0.1297  * NEW BEST *  [ckpt]
+17:35:23       98   0.1291   1.3416  0.7678    18.13    8.00e-06    0m 43s   0.1291  * NEW BEST *  [ckpt]
+17:36:07       99   0.1283   1.3399  0.7603    17.52    4.00e-06    0m 43s   0.1283  * NEW BEST *  [ckpt]
+17:36:50      100   0.1274   1.3398  0.7669    17.69    0.00e+00    0m 42s   0.1274  * NEW BEST *  [ckpt]
+17:36:50  ============================================================
+17:36:50    TRYONNET TRAINING  —  FINAL SUMMARY
+17:36:50  ============================================================
+17:36:50    Total epochs trained : 100
+17:36:50    Best L1 loss         : 0.1274  (epoch 100)
+17:36:50    Total training time  : 1h 13m 02s
+17:36:50    Best checkpoint      : C:\Virtual_try_on\checkpoints/tryon_best.pth
+17:36:50    CSV metrics log      : C:\Virtual_try_on\logs/tryon_metrics.csv
+17:36:50  

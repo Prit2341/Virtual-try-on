@@ -43,7 +43,7 @@ def _load():
             from rembg import new_session
             import logging
             logging.getLogger(__name__).info("Loading rembg (%s) …", MODEL_NAME)
-            _session = new_session(MODEL_NAME)
+            _session = new_session(MODEL_NAME, providers=["CPUExecutionProvider"])
     return _session
 
 

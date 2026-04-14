@@ -1,0 +1,92 @@
+15:19:07  Log file: C:\Virtual_try_on\logs\warp_20260406_151907.txt
+15:19:07  ============================================================
+15:19:07    WARPNET TRAINING  —  CONFIGURATION
+15:19:07  ============================================================
+15:19:07    Stage          : warp
+15:19:07    Device         : cuda
+15:19:07    GPU            : NVIDIA RTX 4000 Ada Generation
+15:19:07    VRAM           : 21.5 GB
+15:19:07    Dataset        : 5000 samples  (C:\Virtual_try_on\dataset\train\tensors)
+15:19:07    Batches/epoch  : 31
+15:19:07    Batch size     : 160
+15:19:07    Learning rate  : 0.0002
+15:19:07    LR decay start : epoch 50
+15:19:07    AMP (fp16)     : True
+15:19:07    Lambda L1      : 1.0
+15:19:07    Lambda VGG     : 1.0
+15:19:07    Lambda Smooth  : 0.5
+15:19:07    Lambda Mask    : 5.0
+15:19:07    Max epochs     : 100
+15:19:07    Early stop     : patience=20, min_delta=0.0001
+15:19:07  
+15:19:07    Free disk space    : 721.66 GB
+15:19:07  
+15:19:07  ============================================================
+15:19:07    HYPERPARAMETER CHANGE LOG
+15:19:07  ============================================================
+15:19:07    [2026-03-24]  LR  2e-4 → 5e-5
+15:19:07             Reason: Model diverged after epoch 7 — loss jumped from 0.141 to 0.177. Lower LR prevents gradient instability after initial fast convergence.
+15:19:07  
+15:19:07    [2026-03-24]  LAMBDA_VGG  0.5 → 0.1
+15:19:07             Reason: VGG perceptual loss was competing with L1 and causing L1 to spike. Reducing weight keeps VGG as a texture guide without overpowering pixel-level alignment.
+15:19:07  
+15:19:07    [2026-03-24]  DECAY_START  30 → 10
+15:19:07             Reason: With LR now at 5e-5, decay should begin earlier so learning rate gradually reduces before the model plateaus.
+15:19:07  
+15:19:07    [2026-03-24]  PATIENCE  10 → 15
+15:19:07             Reason: Extra patience to give the model time to improve under the lower LR.
+15:19:07  
+15:19:07    [2026-03-24]  MIN_DELTA  1e-4 → 5e-5
+15:19:07             Reason: Finer improvement threshold to match the slower, more stable convergence at 5e-5 LR.
+15:19:07  
+15:19:07    [2026-03-24]  NUM_WORKERS  2 → 4
+15:19:07             Reason: Training data moved to HDD (11k samples). 4 workers needed to prefetch and hide HDD random-read latency so GPU stays at 100% utilization.
+15:19:07  
+15:19:07    [2026-03-24]  LAMBDA_FLOW_REG  0 → 0.01
+15:19:07             Reason: Identity bias: penalizes non-zero flow (flow.pow(2).mean()). Prevents cloth from drifting unnecessarily — model defaults to no-warp unless forced by L1.
+15:19:07  
+15:19:07    [2026-03-24]  masked_warp  off → on
+15:19:07             Reason: Applied cloth_mask to warped cloth (warped = warped * warped_mask). Without this, background pixels leak into the warped output causing noise outside cloth region.
+15:19:07  
+15:19:07    [2026-03-24]  flow_scale  1.0 → 0.3
+15:19:07             Reason: WarpNet tanh output was ±1, grid also ±1, so total displacement could reach ±2 (full image). Cloth was flying off-screen producing blob/spike artifacts. Scaling tanh by 0.3 limits max displacement to 30% of image — enough for cloth stretching but prevents catastrophic deformation. Fixed in warp_model.py line 74.
+15:19:07  
+15:19:07    [2026-03-24]  grad_clip  none → 1.0
+15:19:07             Reason: Added gradient clipping (max_norm=1.0) to both warp and tryon. Prevents occasional large gradient updates from destabilizing training.
+15:19:07  
+15:19:07    [2026-03-24]  LAMBDA_TV  0 → 0.5
+15:19:07             Reason: WarpNet flow field was producing chaotic spike/blob artifacts (visible in col 4 of inference). No smoothness constraint meant flow could move pixels arbitrarily far. TV loss penalizes abrupt spatial changes in flow, forcing cloth to warp as a coherent shape.
+15:19:07  
+15:19:07    [2026-03-24]  LAMBDA_VGG_TRYON  0.1 → 0.4
+15:19:07             Reason: Inference showed TryOnNet ignoring cloth color/texture entirely — output matched original person not target cloth. Root cause: L1=0.1 VGG too weak to force texture transfer, model took L1 shortcut reconstructing original region. Higher VGG=0.4 forces perceptual similarity to target cloth.
+15:19:07  
+15:19:07    [2026-03-25]  LAMBDA_TV  0.5 → 0.0
+15:19:07             Reason: Inference showed warped cloth completely blank (gray) — WarpNet output near-zero flow. TV loss + flow_reg together were stronger than L1 signal, model learned to not warp at all. Disabled TV entirely so L1 is the only warp signal.
+15:19:07  
+15:19:07    [2026-03-25]  LAMBDA_FLOW_REG  0.01 → 0.0
+15:19:07             Reason: Same as TV — was compounding the no-warp bias. Disabled alongside TV.
+15:19:07  
+15:19:07    [2026-03-25]  flow_scale  0.3 → 0.5
+15:19:07             Reason: With TV/flow_reg removed, increase displacement budget so cloth can reach body region. 0.3 (30%) was too tight for clothes that need to stretch across the torso.
+15:19:07  
+15:19:07    [2026-03-25]  warp_loss_mask  warped*pcm → warped_raw*pcm
+15:19:07             Reason: Critical bug: loss was computed on warped*warped_mask*pcm (double masked). When warp is even slightly off, both masks don't overlap -> product ~0 -> zero gradient -> model stuck. Fix: compute loss on raw warp before applying warped_mask. Masked warp kept for TryOnNet input only.
+15:19:07  
+15:19:07    [2026-03-25]  WarpNet ngf  64 → 32
+15:19:07             Reason: Lighter model: 4x fewer params (~1.9M vs 7.5M), ~2x faster per epoch. Enough capacity for 5k samples. Frees time for a full retrain today.
+15:19:07  
+15:19:07    [2026-03-25]  TryOnNet ngf  64 → 32
+15:19:07             Reason: Lighter model: matches WarpNet size reduction. Still has U-Net skip connections for detail recovery. Faster training needed to finish today.
+15:19:07  
+15:19:07    [2026-03-25]  LAMBDA_MASK  0 → 5.0
+15:19:07             Reason: Root cause of WarpNet plateau: L1/VGG compared warped flat cloth RGB vs on-body cloth RGB. These can never match well due to wrinkles/shadows/body shape — L1 floors at ~0.14. Mask loss (warped_mask vs pcm) provides a clean geometric signal (binary shapes, no texture noise). Weight=5.0 makes this the dominant gradient source for spatial deformation learning.
+15:19:07  
+15:19:07    [2026-03-25]  WarpNet ngf  32 → 64
+15:19:07             Reason: Restored to original capacity. 32 was insufficient — model couldn't learn geometric warping with fewer params. 10.6M params needed for dense flow prediction.
+15:19:07  
+15:19:07  
+15:19:07  ============================================================
+15:19:07    WARPNET TRAINING  —  EPOCH LOG
+15:19:07  ============================================================
+15:19:07    Epoch       L1      VGG    SSIM     PSNR          LR      Time  Best L1  Status
+15:19:07    ─────  ───────  ───────  ──────  ───────  ──────────  ────────  ───────  ────────────────────

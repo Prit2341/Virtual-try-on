@@ -1,0 +1,32 @@
+12:53:10  Log file: C:\Virtual_try_on\logs\warp_20260324_125310.txt
+12:53:10  ============================================================
+12:53:10    WARPNET TRAINING  —  CONFIGURATION
+12:53:10  ============================================================
+12:53:10    Stage          : warp
+12:53:10    Device         : cuda
+12:53:10    GPU            : NVIDIA GeForce RTX 4070
+12:53:10    VRAM           : 12.9 GB
+12:53:10    Dataset        : 3000 samples  (C:\Virtual_try_on\dataset\train\tensors)
+12:53:10    Batches/epoch  : 187
+12:53:10    Batch size     : 16
+12:53:10    Learning rate  : 5e-05
+12:53:10    LR decay start : epoch 10
+12:53:10    AMP (fp16)     : True
+12:53:10    Lambda L1      : 1.0
+12:53:10    Lambda VGG     : 0.1
+12:53:10    Max epochs     : 100
+12:53:10    Early stop     : patience=15, min_delta=5e-05
+12:53:10    Resume from    : checkpoints/warp_best.pth
+12:53:10  
+12:53:10    Free disk space    : 23.89 GB
+12:53:10  
+12:53:11  Resumed from epoch 7
+
+12:53:11  ============================================================
+12:53:11    WARPNET TRAINING  —  EPOCH LOG
+12:53:11  ============================================================
+12:53:11     Epoch    Avg L1    Avg VGG          LR   Epoch Time   Best L1  Status
+12:53:11    ------  --------  ---------  ----------  -----------  --------  --------------------
+12:53:35         8    0.1409     0.9469    5.00e-05       0m 23s    0.1409  NEW BEST  [saved warp_best.pth]  
+12:53:53         9    0.1406     0.9457    5.00e-05       0m 18s    0.1406  NEW BEST  [saved warp_best.pth]  
+12:54:12        10    0.1406     0.9442    5.00e-05       0m 17s    0.1406  no improvement  1/15  [ckpt: warp_epoch_010.pth]

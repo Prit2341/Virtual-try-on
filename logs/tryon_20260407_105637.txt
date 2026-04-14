@@ -1,0 +1,22 @@
+10:56:37  Log file: C:\Virtual_try_on\logs\tryon_20260407_105637.txt
+10:56:37  ============================================================
+10:56:37    CNN-BASED TRY-ON — CONFIGURATION
+10:56:37  ============================================================
+10:56:37    Architecture   : U-Net (BatchNorm + MaxPool + Bilinear)
+10:56:37    Input channels : 6  (person 3 + cloth 3)
+10:56:37    Loss           : L1 only (no explicit warping)
+10:56:37    Device         : cuda
+10:56:37    GPU            : NVIDIA RTX 4000 Ada Generation
+10:56:37    VRAM           : 21.5 GB
+10:56:37    Dataset        : 11647 samples  (C:\Virtual_try_on\dataset\train\tensors)
+10:56:37    Batch size     : 112
+10:56:37    Learning rate  : 0.0002
+10:56:37    Epochs         : 100
+10:56:37    AMP (fp16)     : True
+10:56:37    Early stop     : patience=20, min_delta=0.0001
+10:56:37  
+10:56:37  ============================================================
+10:56:37    CNN-BASED TRY-ON — EPOCH LOG
+10:56:37  ============================================================
+10:56:37    Epoch       L1      VGG    SSIM     PSNR          LR      Time  Best L1  Status
+10:56:37    ─────  ───────  ───────  ──────  ───────  ──────────  ────────  ───────  ────────────────────

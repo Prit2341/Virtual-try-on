@@ -20,7 +20,7 @@ import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
 from pathlib import Path
 
-DATASET = Path("d:/Virtul_try_on/dataset")
+DATASET = Path(__file__).resolve().parent / "dataset"
 
 # SegFormer cloth label names (index → name)
 LABEL_NAMES = {

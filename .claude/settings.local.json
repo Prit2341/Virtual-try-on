@@ -1,11 +1,18 @@
 {
   "permissions": {
     "allow": [
-      "Bash(ls d:/Virtul_try_on/dataset/train/tensors/*.pt)",
-      "Bash(python -c \"import torch; print\\(torch.__version__\\); print\\(''CUDA:'', torch.cuda.is_available\\(\\)\\); print\\(torch.cuda.get_device_name\\(0\\) if torch.cuda.is_available\\(\\) else ''no gpu''\\)\")",
+      "Bash(find c:/Virtual_try_on -name *.zip -o -name *.tar* -o -name *.7z)",
+      "Bash(./venv/Scripts/python.exe -c \":*)",
+      "Bash(python -c \"from PIL import Image; print\\(''PIL ok''\\)\")",
+      "Bash(pip install:*)",
       "Bash(python -c \":*)",
-      "Bash(python train.py --stage warp --epochs 1 --batch 2 --accum 1 --decay-start 0)",
-      "Bash(timeout 90)"
+      "Bash(nvidia-smi --query-gpu=name,memory.total --format=csv,noheader)",
+      "Bash(ls -la checkpoints/tryon*.pth)",
+      "Bash(source venv/Scripts/activate)",
+      "Bash(python infer.py --n 8 --data dataset/test/tensors)",
+      "Bash(find model:*)",
+      "Bash(xargs grep:*)",
+      "Bash(python train.py --stage warp --variant v1_improved --list-variants)"
     ]
   }
 }

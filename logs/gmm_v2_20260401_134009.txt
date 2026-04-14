@@ -1,0 +1,26 @@
+13:40:09  Log file: C:\Virtual_try_on\logs\gmm_v2_20260401_134009.txt
+13:40:09  ============================================================
+13:40:09    GMM TRAINING (V2)  —  CONFIGURATION
+13:40:09  ============================================================
+13:40:09    Device         : cuda
+13:40:09    GPU            : NVIDIA RTX 4000 Ada Generation
+13:40:09    VRAM           : 21.5 GB
+13:40:09    Dataset        : 11647 samples
+13:40:09    Batches/epoch  : 181
+13:40:09    Batch size     : 64
+13:40:09    Learning rate  : 0.0002
+13:40:09    LR decay start : epoch 50
+13:40:09    AMP (fp16)     : True
+13:40:09    Lambda L1      : 1.0
+13:40:09    Lambda VGG     : 0.5
+13:40:09    Lambda Mask    : 5.0
+13:40:09    Lambda Theta   : 0.01
+13:40:09    Max epochs     : 100
+13:40:09    Early stop     : patience=20
+13:40:09    Free disk      : 732.26 GB
+13:40:09  
+13:40:10  ============================================================
+13:40:10    GMM TRAINING  —  EPOCH LOG
+13:40:10  ============================================================
+13:40:10     Epoch    Avg L1    Avg VGG   Avg Mask          LR      Time   Best L1  Status
+13:40:10    ------  --------  ---------  ---------  ----------  --------  --------  --------------------

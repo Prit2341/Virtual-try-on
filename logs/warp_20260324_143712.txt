@@ -1,0 +1,119 @@
+14:37:12  Log file: C:\Virtual_try_on\logs\warp_20260324_143712.txt
+14:37:12  ============================================================
+14:37:12    WARPNET TRAINING  —  CONFIGURATION
+14:37:12  ============================================================
+14:37:12    Stage          : warp
+14:37:12    Device         : cuda
+14:37:12    GPU            : NVIDIA GeForce RTX 4070
+14:37:12    VRAM           : 12.9 GB
+14:37:12    Dataset        : 5000 samples  (C:\Virtual_try_on\dataset\train\tensors)
+14:37:12    Batches/epoch  : 312
+14:37:12    Batch size     : 16
+14:37:12    Learning rate  : 5e-05
+14:37:12    LR decay start : epoch 10
+14:37:12    AMP (fp16)     : True
+14:37:12    Lambda L1      : 1.0
+14:37:12    Lambda VGG     : 0.1
+14:37:12    Max epochs     : 100
+14:37:12    Early stop     : patience=15, min_delta=5e-05
+14:37:12  
+14:37:12    Free disk space    : 1.93 GB
+14:37:12  
+14:37:12  ============================================================
+14:37:12    HYPERPARAMETER CHANGE LOG
+14:37:12  ============================================================
+14:37:12    [2026-03-24]  LR  2e-4 → 5e-5
+14:37:12             Reason: Model diverged after epoch 7 — loss jumped from 0.141 to 0.177. Lower LR prevents gradient instability after initial fast convergence.
+14:37:12  
+14:37:12    [2026-03-24]  LAMBDA_VGG  0.5 → 0.1
+14:37:12             Reason: VGG perceptual loss was competing with L1 and causing L1 to spike. Reducing weight keeps VGG as a texture guide without overpowering pixel-level alignment.
+14:37:12  
+14:37:12    [2026-03-24]  DECAY_START  30 → 10
+14:37:12             Reason: With LR now at 5e-5, decay should begin earlier so learning rate gradually reduces before the model plateaus.
+14:37:12  
+14:37:12    [2026-03-24]  PATIENCE  10 → 15
+14:37:12             Reason: Extra patience to give the model time to improve under the lower LR.
+14:37:12  
+14:37:12    [2026-03-24]  MIN_DELTA  1e-4 → 5e-5
+14:37:12             Reason: Finer improvement threshold to match the slower, more stable convergence at 5e-5 LR.
+14:37:12  
+14:37:12    [2026-03-24]  NUM_WORKERS  2 → 4
+14:37:12             Reason: Training data moved to HDD (11k samples). 4 workers needed to prefetch and hide HDD random-read latency so GPU stays at 100% utilization.
+14:37:12  
+14:37:12  
+14:37:13  ============================================================
+14:37:13    WARPNET TRAINING  —  EPOCH LOG
+14:37:13  ============================================================
+14:37:13     Epoch    Avg L1    Avg VGG          LR   Epoch Time   Best L1  Status
+14:37:13    ------  --------  ---------  ----------  -----------  --------  --------------------
+14:37:56         1    0.1423     0.9766    5.00e-05       0m 42s    0.1423  NEW BEST  [saved warp_best.pth]  
+14:38:26         2    0.1404     0.9369    5.00e-05       0m 30s    0.1404  NEW BEST  [saved warp_best.pth]  
+14:38:57         3    0.1400     0.9242    5.00e-05       0m 30s    0.1400  NEW BEST  [saved warp_best.pth]  
+14:39:28         4    0.1399     0.9194    5.00e-05       0m 30s    0.1399  NEW BEST  [saved warp_best.pth]  
+14:39:59         5    0.1399     0.9150    5.00e-05       0m 30s    0.1399  no improvement  1/15  
+14:40:30         6    0.1397     0.9119    5.00e-05       0m 30s    0.1397  NEW BEST  [saved warp_best.pth]  
+14:41:00         7    0.1396     0.9127    5.00e-05       0m 29s    0.1396  NEW BEST  [saved warp_best.pth]  
+14:41:29         8    0.1398     0.9075    5.00e-05       0m 29s    0.1396  no improvement  1/15  
+14:42:00         9    0.1396     0.9034    5.00e-05       0m 30s    0.1396  no improvement  2/15  
+14:42:32        10    0.1399     0.9022    5.00e-05       0m 30s    0.1396  no improvement  3/15  [ckpt: warp_epoch_010.pth]
+14:43:03        11    0.1397     0.8982    4.94e-05       0m 30s    0.1396  no improvement  4/15  
+14:43:32        12    0.1394     0.8975    4.89e-05       0m 29s    0.1394  NEW BEST  [saved warp_best.pth]  
+14:44:02        13    0.1398     0.8976    4.83e-05       0m 29s    0.1394  no improvement  1/15  
+14:44:32        14    0.1395     0.8923    4.78e-05       0m 29s    0.1394  no improvement  2/15  
+14:45:01        15    0.1397     0.8903    4.72e-05       0m 29s    0.1394  no improvement  3/15  
+14:45:31        16    0.1396     0.8892    4.67e-05       0m 29s    0.1394  no improvement  4/15  
+14:46:01        17    0.1396     0.8897    4.61e-05       0m 29s    0.1394  no improvement  5/15  
+14:46:30        18    0.1396     0.8879    4.56e-05       0m 29s    0.1394  no improvement  6/15  
+14:47:00        19    0.1395     0.8882    4.50e-05       0m 29s    0.1394  no improvement  7/15  
+14:47:30        20    0.1396     0.8852    4.44e-05       0m 29s    0.1394  no improvement  8/15  [ckpt: warp_epoch_020.pth]
+14:47:59        21    0.1398     0.8865    4.39e-05       0m 29s    0.1394  no improvement  9/15  
+14:48:29        22    0.1395     0.8831    4.33e-05       0m 29s    0.1394  no improvement  10/15  
+14:48:58        23    0.1395     0.8872    4.28e-05       0m 29s    0.1394  no improvement  11/15  
+14:49:28        24    0.1395     0.8803    4.22e-05       0m 29s    0.1394  no improvement  12/15  
+14:49:58        25    0.1394     0.8840    4.17e-05       0m 29s    0.1394  no improvement  13/15  
+14:50:27        26    0.1392     0.8839    4.11e-05       0m 29s    0.1392  NEW BEST  [saved warp_best.pth]  
+14:50:57        27    0.1393     0.8839    4.06e-05       0m 29s    0.1392  no improvement  1/15  
+14:51:27        28    0.1393     0.8833    4.00e-05       0m 29s    0.1392  no improvement  2/15  
+14:51:56        29    0.1394     0.8803    3.94e-05       0m 29s    0.1392  no improvement  3/15  
+14:52:26        30    0.1395     0.8778    3.89e-05       0m 29s    0.1392  no improvement  4/15  [ckpt: warp_epoch_030.pth]
+14:52:56        31    0.1394     0.8809    3.83e-05       0m 29s    0.1392  no improvement  5/15  
+14:53:25        32    0.1393     0.8842    3.78e-05       0m 29s    0.1392  no improvement  6/15  
+14:53:55        33    0.1393     0.8781    3.72e-05       0m 29s    0.1392  no improvement  7/15  
+14:54:25        34    0.1394     0.8768    3.67e-05       0m 29s    0.1392  no improvement  8/15  
+14:54:54        35    0.1392     0.8762    3.61e-05       0m 29s    0.1392  no improvement  9/15  
+14:55:24        36    0.1393     0.8756    3.56e-05       0m 29s    0.1392  no improvement  10/15  
+14:55:54        37    0.1394     0.8727    3.50e-05       0m 30s    0.1392  no improvement  11/15  
+14:56:24        38    0.1390     0.8754    3.44e-05       0m 30s    0.1390  NEW BEST  [saved warp_best.pth]  
+14:56:54        39    0.1393     0.8732    3.39e-05       0m 29s    0.1390  no improvement  1/15  
+14:57:24        40    0.1392     0.8727    3.33e-05       0m 29s    0.1390  no improvement  2/15  [ckpt: warp_epoch_040.pth]
+14:57:55        41    0.1391     0.8719    3.28e-05       0m 30s    0.1390  no improvement  3/15  
+14:58:24        42    0.1391     0.8718    3.22e-05       0m 29s    0.1390  no improvement  4/15  
+14:58:54        43    0.1392     0.8726    3.17e-05       0m 29s    0.1390  no improvement  5/15  
+14:59:24        44    0.1391     0.8719    3.11e-05       0m 29s    0.1390  no improvement  6/15  
+14:59:53        45    0.1391     0.8734    3.06e-05       0m 29s    0.1390  no improvement  7/15  
+15:00:23        46    0.1392     0.8713    3.00e-05       0m 29s    0.1390  no improvement  8/15  
+15:00:53        47    0.1390     0.8692    2.94e-05       0m 29s    0.1390  no improvement  9/15  
+15:01:22        48    0.1389     0.8702    2.89e-05       0m 29s    0.1389  NEW BEST  [saved warp_best.pth]  
+15:01:52        49    0.1389     0.8712    2.83e-05       0m 29s    0.1389  no improvement  1/15  
+15:02:22        50    0.1392     0.8704    2.78e-05       0m 29s    0.1389  no improvement  2/15  [ckpt: warp_epoch_050.pth]
+15:02:53        51    0.1390     0.8702    2.72e-05       0m 30s    0.1389  no improvement  3/15  
+15:03:23        52    0.1390     0.8696    2.67e-05       0m 30s    0.1389  no improvement  4/15  
+15:03:53        53    0.1390     0.8693    2.61e-05       0m 29s    0.1389  no improvement  5/15  
+15:04:23        54    0.1390     0.8670    2.56e-05       0m 29s    0.1389  no improvement  6/15  
+15:04:52        55    0.1389     0.8666    2.50e-05       0m 29s    0.1389  no improvement  7/15  
+15:05:22        56    0.1389     0.8690    2.44e-05       0m 29s    0.1389  no improvement  8/15  
+15:05:52        57    0.1389     0.8683    2.39e-05       0m 29s    0.1389  no improvement  9/15  
+15:06:21        58    0.1391     0.8685    2.33e-05       0m 29s    0.1389  no improvement  10/15  
+15:06:51        59    0.1387     0.8699    2.28e-05       0m 29s    0.1387  NEW BEST  [saved warp_best.pth]  
+15:07:21        60    0.1391     0.8677    2.22e-05       0m 29s    0.1387  no improvement  1/15  [ckpt: warp_epoch_060.pth]
+15:07:50        61    0.1389     0.8644    2.17e-05       0m 29s    0.1387  no improvement  2/15  
+15:08:20        62    0.1388     0.8674    2.11e-05       0m 29s    0.1387  no improvement  3/15  
+15:08:50        63    0.1388     0.8664    2.06e-05       0m 29s    0.1387  no improvement  4/15  
+15:09:20        64    0.1386     0.8638    2.00e-05       0m 29s    0.1386  NEW BEST  [saved warp_best.pth]  
+15:09:49        65    0.1388     0.8632    1.94e-05       0m 29s    0.1386  no improvement  1/15  
+15:10:20        66    0.1389     0.8633    1.89e-05       0m 30s    0.1386  no improvement  2/15  
+15:10:50        67    0.1386     0.8637    1.83e-05       0m 30s    0.1386  no improvement  3/15  
+15:11:20        68    0.1388     0.8645    1.78e-05       0m 29s    0.1386  no improvement  4/15  
+15:11:50        69    0.1386     0.8632    1.72e-05       0m 30s    0.1386  no improvement  5/15  
+15:12:20        70    0.1389     0.8657    1.67e-05       0m 29s    0.1386  no improvement  6/15  [ckpt: warp_epoch_070.pth]
+15:12:50        71    0.1387     0.8636    1.61e-05       0m 29s    0.1386  no improvement  7/15  

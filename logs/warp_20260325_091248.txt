@@ -1,0 +1,86 @@
+09:12:48  Log file: C:\Virtual_try_on\logs\warp_20260325_091248.txt
+09:12:48  ============================================================
+09:12:48    WARPNET TRAINING  —  CONFIGURATION
+09:12:48  ============================================================
+09:12:48    Stage          : warp
+09:12:48    Device         : cuda
+09:12:48    GPU            : NVIDIA GeForce RTX 4070
+09:12:48    VRAM           : 12.9 GB
+09:12:48    Dataset        : 5000 samples  (C:\Virtual_try_on\dataset\train\tensors)
+09:12:48    Batches/epoch  : 312
+09:12:48    Batch size     : 16
+09:12:48    Learning rate  : 5e-05
+09:12:48    LR decay start : epoch 10
+09:12:48    AMP (fp16)     : True
+09:12:48    Lambda L1      : 1.0
+09:12:48    Lambda VGG     : 0.1
+09:12:48    Max epochs     : 100
+09:12:48    Early stop     : patience=15, min_delta=5e-05
+09:12:48  
+09:12:48    Free disk space    : 0.61 GB
+09:12:48  
+09:12:48  ============================================================
+09:12:48    HYPERPARAMETER CHANGE LOG
+09:12:48  ============================================================
+09:12:48    [2026-03-24]  LR  2e-4 → 5e-5
+09:12:48             Reason: Model diverged after epoch 7 — loss jumped from 0.141 to 0.177. Lower LR prevents gradient instability after initial fast convergence.
+09:12:48  
+09:12:48    [2026-03-24]  LAMBDA_VGG  0.5 → 0.1
+09:12:48             Reason: VGG perceptual loss was competing with L1 and causing L1 to spike. Reducing weight keeps VGG as a texture guide without overpowering pixel-level alignment.
+09:12:48  
+09:12:48    [2026-03-24]  DECAY_START  30 → 10
+09:12:48             Reason: With LR now at 5e-5, decay should begin earlier so learning rate gradually reduces before the model plateaus.
+09:12:48  
+09:12:48    [2026-03-24]  PATIENCE  10 → 15
+09:12:48             Reason: Extra patience to give the model time to improve under the lower LR.
+09:12:48  
+09:12:48    [2026-03-24]  MIN_DELTA  1e-4 → 5e-5
+09:12:48             Reason: Finer improvement threshold to match the slower, more stable convergence at 5e-5 LR.
+09:12:48  
+09:12:48    [2026-03-24]  NUM_WORKERS  2 → 4
+09:12:48             Reason: Training data moved to HDD (11k samples). 4 workers needed to prefetch and hide HDD random-read latency so GPU stays at 100% utilization.
+09:12:48  
+09:12:48    [2026-03-24]  LAMBDA_FLOW_REG  0 → 0.01
+09:12:48             Reason: Identity bias: penalizes non-zero flow (flow.pow(2).mean()). Prevents cloth from drifting unnecessarily — model defaults to no-warp unless forced by L1.
+09:12:48  
+09:12:48    [2026-03-24]  masked_warp  off → on
+09:12:48             Reason: Applied cloth_mask to warped cloth (warped = warped * warped_mask). Without this, background pixels leak into the warped output causing noise outside cloth region.
+09:12:48  
+09:12:48    [2026-03-24]  flow_scale  1.0 → 0.3
+09:12:48             Reason: WarpNet tanh output was ±1, grid also ±1, so total displacement could reach ±2 (full image). Cloth was flying off-screen producing blob/spike artifacts. Scaling tanh by 0.3 limits max displacement to 30% of image — enough for cloth stretching but prevents catastrophic deformation. Fixed in warp_model.py line 74.
+09:12:48  
+09:12:48    [2026-03-24]  grad_clip  none → 1.0
+09:12:48             Reason: Added gradient clipping (max_norm=1.0) to both warp and tryon. Prevents occasional large gradient updates from destabilizing training.
+09:12:48  
+09:12:48    [2026-03-24]  LAMBDA_TV  0 → 0.5
+09:12:48             Reason: WarpNet flow field was producing chaotic spike/blob artifacts (visible in col 4 of inference). No smoothness constraint meant flow could move pixels arbitrarily far. TV loss penalizes abrupt spatial changes in flow, forcing cloth to warp as a coherent shape.
+09:12:48  
+09:12:48    [2026-03-24]  LAMBDA_VGG_TRYON  0.1 → 0.4
+09:12:48             Reason: Inference showed TryOnNet ignoring cloth color/texture entirely — output matched original person not target cloth. Root cause: L1=0.1 VGG too weak to force texture transfer, model took L1 shortcut reconstructing original region. Higher VGG=0.4 forces perceptual similarity to target cloth.
+09:12:48  
+09:12:48    [2026-03-25]  LAMBDA_TV  0.5 → 0.0
+09:12:48             Reason: Inference showed warped cloth completely blank (gray) — WarpNet output near-zero flow. TV loss + flow_reg together were stronger than L1 signal, model learned to not warp at all. Disabled TV entirely so L1 is the only warp signal.
+09:12:48  
+09:12:48    [2026-03-25]  LAMBDA_FLOW_REG  0.01 → 0.0
+09:12:48             Reason: Same as TV — was compounding the no-warp bias. Disabled alongside TV.
+09:12:48  
+09:12:48    [2026-03-25]  flow_scale  0.3 → 0.5
+09:12:48             Reason: With TV/flow_reg removed, increase displacement budget so cloth can reach body region. 0.3 (30%) was too tight for clothes that need to stretch across the torso.
+09:12:48  
+09:12:48    [2026-03-25]  WarpNet ngf  64 → 32
+09:12:48             Reason: Lighter model: 4x fewer params (~1.9M vs 7.5M), ~2x faster per epoch. Enough capacity for 5k samples. Frees time for a full retrain today.
+09:12:48  
+09:12:48    [2026-03-25]  TryOnNet ngf  64 → 32
+09:12:48             Reason: Lighter model: matches WarpNet size reduction. Still has U-Net skip connections for detail recovery. Faster training needed to finish today.
+09:12:48  
+09:12:48  
+09:12:48  ============================================================
+09:12:48    WARPNET TRAINING  —  EPOCH LOG
+09:12:48  ============================================================
+09:12:48     Epoch    Avg L1    Avg VGG          LR   Epoch Time   Best L1  Status
+09:12:48    ------  --------  ---------  ----------  -----------  --------  --------------------
+09:13:30         1    0.1134     0.8407    5.00e-05       0m 42s    0.1134  NEW BEST  [saved warp_best.pth]  
+09:13:54         2    0.1131     0.8308    5.00e-05       0m 23s    0.1131  NEW BEST  [saved warp_best.pth]  
+09:14:18         3    0.1131     0.8329    5.00e-05       0m 24s    0.1131  no improvement  1/15  
+09:14:42         4    0.1131     0.8319    5.00e-05       0m 23s    0.1131  no improvement  2/15  
+09:15:07         5    0.1130     0.8292    5.00e-05       0m 24s    0.1130  NEW BEST  [saved warp_best.pth]  

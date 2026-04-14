@@ -1,30 +1,22 @@
-# VITON-HD Preprocessing Dependencies
-# Python 3.10 | RTX 4070
+# VITON-HD — Python 3.12 | RTX 4000 Ada (20 GB) | CUDA 12.8
+#
+# Install:
+#   pip install -r requirements.txt
 
-# ── Core ─────────────────────────────────────────────────────────────────────
-torch==2.1.2
-torchvision==0.16.2
-numpy==1.26.4
+--extra-index-url https://download.pytorch.org/whl/cu128
+
+# ── Core ──────────────────────────────────────────────────────────────────────
+torch==2.7.1+cu128
+torchvision==0.22.1+cu128
+numpy==2.2.4
 
 # ── Image I/O ─────────────────────────────────────────────────────────────────
-opencv-python==4.9.0.80
-Pillow==10.2.0
-
-# ── Human Parsing (SegFormer) ─────────────────────────────────────────────────
-transformers==4.38.2
-huggingface-hub==0.21.4
-accelerate==0.27.2
-
-# ── Pose Estimation ───────────────────────────────────────────────────────────
-mediapipe==0.10.11
-
-# ── Cloth Mask (U2Net) ────────────────────────────────────────────────────────
-rembg==2.0.56
-onnxruntime==1.17.1
+opencv-python==4.11.0.86
+Pillow==11.2.1
 
 # ── Utils ─────────────────────────────────────────────────────────────────────
-tqdm==4.66.2
-matplotlib==3.8.3
+tqdm==4.67.1
+matplotlib==3.10.1
 
 # ── Training / Logging ────────────────────────────────────────────────────────
-tensorboard==2.16.2
+tensorboard==2.19.0

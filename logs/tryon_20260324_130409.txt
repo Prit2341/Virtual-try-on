@@ -1,0 +1,66 @@
+13:04:09  Log file: C:\Virtual_try_on\logs\tryon_20260324_130409.txt
+13:04:09  ============================================================
+13:04:09    TRYONNET TRAINING  —  CONFIGURATION
+13:04:09  ============================================================
+13:04:09    Stage          : tryon
+13:04:09    Device         : cuda
+13:04:09    GPU            : NVIDIA GeForce RTX 4070
+13:04:09    VRAM           : 12.9 GB
+13:04:09    Dataset        : 3000 samples  (C:\Virtual_try_on\dataset\train\tensors)
+13:04:09    Batches/epoch  : 187
+13:04:09    Batch size     : 16
+13:04:09    Learning rate  : 5e-05
+13:04:09    LR decay start : epoch 10
+13:04:09    AMP (fp16)     : True
+13:04:09    Lambda L1      : 1.0
+13:04:09    Lambda VGG     : 0.1
+13:04:09    Max epochs     : 100
+13:04:09    Early stop     : patience=15, min_delta=5e-05
+13:04:09    WarpNet ckpt   : checkpoints/warp_best.pth
+13:04:09  
+13:04:10  Loaded WarpNet: checkpoints/warp_best.pth
+13:04:10    Free disk space    : 23.70 GB
+13:04:10  
+13:04:10  ============================================================
+13:04:10    HYPERPARAMETER CHANGE LOG
+13:04:10  ============================================================
+13:04:10    [2026-03-24]  LR  2e-4 → 5e-5
+13:04:10             Reason: Model diverged after epoch 7 — loss jumped from 0.141 to 0.177. Lower LR prevents gradient instability after initial fast convergence.
+13:04:10  
+13:04:10    [2026-03-24]  LAMBDA_VGG  0.5 → 0.1
+13:04:10             Reason: VGG perceptual loss was competing with L1 and causing L1 to spike. Reducing weight keeps VGG as a texture guide without overpowering pixel-level alignment.
+13:04:10  
+13:04:10    [2026-03-24]  DECAY_START  30 → 10
+13:04:10             Reason: With LR now at 5e-5, decay should begin earlier so learning rate gradually reduces before the model plateaus.
+13:04:10  
+13:04:10    [2026-03-24]  PATIENCE  10 → 15
+13:04:10             Reason: Extra patience to give the model time to improve under the lower LR.
+13:04:10  
+13:04:10    [2026-03-24]  MIN_DELTA  1e-4 → 5e-5
+13:04:10             Reason: Finer improvement threshold to match the slower, more stable convergence at 5e-5 LR.
+13:04:10  
+13:04:10  
+13:04:10  ============================================================
+13:04:10    TRYONNET TRAINING  —  EPOCH LOG
+13:04:10  ============================================================
+13:04:10     Epoch    Avg L1    Avg VGG          LR   Epoch Time   Best L1  Status
+13:04:10    ------  --------  ---------  ----------  -----------  --------  --------------------
+13:04:38         1    0.3005     2.2965    5.00e-05       0m 27s    0.3005  NEW BEST  [saved tryon_best.pth]  
+13:04:59         2    0.1823     1.7399    5.00e-05       0m 21s    0.1823  NEW BEST  [saved tryon_best.pth]  
+13:05:20         3    0.1727     1.5702    5.00e-05       0m 21s    0.1727  NEW BEST  [saved tryon_best.pth]  
+13:05:42         4    0.1669     1.4749    5.00e-05       0m 21s    0.1669  NEW BEST  [saved tryon_best.pth]  
+13:06:04         5    0.1625     1.4035    5.00e-05       0m 21s    0.1625  NEW BEST  [saved tryon_best.pth]  
+13:06:25         6    0.1590     1.3599    5.00e-05       0m 21s    0.1590  NEW BEST  [saved tryon_best.pth]  
+13:06:47         7    0.1566     1.3240    5.00e-05       0m 21s    0.1566  NEW BEST  [saved tryon_best.pth]  
+13:07:09         8    0.1542     1.3006    5.00e-05       0m 21s    0.1542  NEW BEST  [saved tryon_best.pth]  
+13:07:30         9    0.1521     1.2804    5.00e-05       0m 21s    0.1521  NEW BEST  [saved tryon_best.pth]  
+13:07:52        10    0.1503     1.2699    5.00e-05       0m 21s    0.1503  NEW BEST  [saved tryon_best.pth]  [ckpt: tryon_epoch_010.pth]
+13:08:13        11    0.1492     1.2572    4.94e-05       0m 21s    0.1492  NEW BEST  [saved tryon_best.pth]  
+13:08:35        12    0.1474     1.2432    4.89e-05       0m 21s    0.1474  NEW BEST  [saved tryon_best.pth]  
+13:08:56        13    0.1465     1.2355    4.83e-05       0m 21s    0.1465  NEW BEST  [saved tryon_best.pth]  
+13:09:18        14    0.1441     1.2296    4.78e-05       0m 21s    0.1441  NEW BEST  [saved tryon_best.pth]  
+13:09:40        15    0.1433     1.2213    4.72e-05       0m 21s    0.1433  NEW BEST  [saved tryon_best.pth]  
+13:10:01        16    0.1424     1.2150    4.67e-05       0m 21s    0.1424  NEW BEST  [saved tryon_best.pth]  
+13:10:23        17    0.1410     1.2096    4.61e-05       0m 21s    0.1410  NEW BEST  [saved tryon_best.pth]  
+13:10:44        18    0.1397     1.2055    4.56e-05       0m 21s    0.1397  NEW BEST  [saved tryon_best.pth]  
+13:11:06        19    0.1379     1.2039    4.50e-05       0m 21s    0.1379  NEW BEST  [saved tryon_best.pth]  

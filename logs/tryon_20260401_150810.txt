@@ -1,0 +1,201 @@
+15:08:10  Log file: C:\Virtual_try_on\logs\tryon_20260401_150810.txt
+15:08:10  ============================================================
+15:08:10    TRYONNET TRAINING  —  CONFIGURATION
+15:08:10  ============================================================
+15:08:10    Stage          : tryon
+15:08:10    Device         : cuda
+15:08:10    GPU            : NVIDIA RTX 4000 Ada Generation
+15:08:10    VRAM           : 21.5 GB
+15:08:10    Dataset        : 11647 samples  (C:\Virtual_try_on\dataset\train\tensors)
+15:08:10    Batches/epoch  : 90
+15:08:10    Batch size     : 128
+15:08:10    Learning rate  : 0.0002
+15:08:10    LR decay start : epoch 50
+15:08:10    AMP (fp16)     : True
+15:08:10    Lambda L1      : 1.0
+15:08:10    Lambda VGG     : 1.0
+15:08:10    Max epochs     : 100
+15:08:10    Early stop     : patience=20, min_delta=0.0001
+15:08:10    WarpNet ckpt   : C:\Virtual_try_on\checkpoints\warp_best.pth
+15:08:10  
+15:08:10  Loaded WarpNet: C:\Virtual_try_on\checkpoints\warp_best.pth
+15:08:10    Free disk space    : 732.25 GB
+15:08:10  
+15:08:10  ============================================================
+15:08:10    HYPERPARAMETER CHANGE LOG
+15:08:10  ============================================================
+15:08:10    [2026-03-24]  LR  2e-4 → 5e-5
+15:08:10             Reason: Model diverged after epoch 7 — loss jumped from 0.141 to 0.177. Lower LR prevents gradient instability after initial fast convergence.
+15:08:10  
+15:08:10    [2026-03-24]  LAMBDA_VGG  0.5 → 0.1
+15:08:10             Reason: VGG perceptual loss was competing with L1 and causing L1 to spike. Reducing weight keeps VGG as a texture guide without overpowering pixel-level alignment.
+15:08:10  
+15:08:10    [2026-03-24]  DECAY_START  30 → 10
+15:08:10             Reason: With LR now at 5e-5, decay should begin earlier so learning rate gradually reduces before the model plateaus.
+15:08:10  
+15:08:10    [2026-03-24]  PATIENCE  10 → 15
+15:08:10             Reason: Extra patience to give the model time to improve under the lower LR.
+15:08:10  
+15:08:10    [2026-03-24]  MIN_DELTA  1e-4 → 5e-5
+15:08:10             Reason: Finer improvement threshold to match the slower, more stable convergence at 5e-5 LR.
+15:08:10  
+15:08:10    [2026-03-24]  NUM_WORKERS  2 → 4
+15:08:10             Reason: Training data moved to HDD (11k samples). 4 workers needed to prefetch and hide HDD random-read latency so GPU stays at 100% utilization.
+15:08:10  
+15:08:10    [2026-03-24]  LAMBDA_FLOW_REG  0 → 0.01
+15:08:10             Reason: Identity bias: penalizes non-zero flow (flow.pow(2).mean()). Prevents cloth from drifting unnecessarily — model defaults to no-warp unless forced by L1.
+15:08:10  
+15:08:10    [2026-03-24]  masked_warp  off → on
+15:08:10             Reason: Applied cloth_mask to warped cloth (warped = warped * warped_mask). Without this, background pixels leak into the warped output causing noise outside cloth region.
+15:08:10  
+15:08:10    [2026-03-24]  flow_scale  1.0 → 0.3
+15:08:10             Reason: WarpNet tanh output was ±1, grid also ±1, so total displacement could reach ±2 (full image). Cloth was flying off-screen producing blob/spike artifacts. Scaling tanh by 0.3 limits max displacement to 30% of image — enough for cloth stretching but prevents catastrophic deformation. Fixed in warp_model.py line 74.
+15:08:10  
+15:08:10    [2026-03-24]  grad_clip  none → 1.0
+15:08:10             Reason: Added gradient clipping (max_norm=1.0) to both warp and tryon. Prevents occasional large gradient updates from destabilizing training.
+15:08:10  
+15:08:10    [2026-03-24]  LAMBDA_TV  0 → 0.5
+15:08:10             Reason: WarpNet flow field was producing chaotic spike/blob artifacts (visible in col 4 of inference). No smoothness constraint meant flow could move pixels arbitrarily far. TV loss penalizes abrupt spatial changes in flow, forcing cloth to warp as a coherent shape.
+15:08:10  
+15:08:10    [2026-03-24]  LAMBDA_VGG_TRYON  0.1 → 0.4
+15:08:10             Reason: Inference showed TryOnNet ignoring cloth color/texture entirely — output matched original person not target cloth. Root cause: L1=0.1 VGG too weak to force texture transfer, model took L1 shortcut reconstructing original region. Higher VGG=0.4 forces perceptual similarity to target cloth.
+15:08:10  
+15:08:10    [2026-03-25]  LAMBDA_TV  0.5 → 0.0
+15:08:10             Reason: Inference showed warped cloth completely blank (gray) — WarpNet output near-zero flow. TV loss + flow_reg together were stronger than L1 signal, model learned to not warp at all. Disabled TV entirely so L1 is the only warp signal.
+15:08:10  
+15:08:10    [2026-03-25]  LAMBDA_FLOW_REG  0.01 → 0.0
+15:08:10             Reason: Same as TV — was compounding the no-warp bias. Disabled alongside TV.
+15:08:10  
+15:08:10    [2026-03-25]  flow_scale  0.3 → 0.5
+15:08:10             Reason: With TV/flow_reg removed, increase displacement budget so cloth can reach body region. 0.3 (30%) was too tight for clothes that need to stretch across the torso.
+15:08:10  
+15:08:10    [2026-03-25]  warp_loss_mask  warped*pcm → warped_raw*pcm
+15:08:10             Reason: Critical bug: loss was computed on warped*warped_mask*pcm (double masked). When warp is even slightly off, both masks don't overlap -> product ~0 -> zero gradient -> model stuck. Fix: compute loss on raw warp before applying warped_mask. Masked warp kept for TryOnNet input only.
+15:08:10  
+15:08:10    [2026-03-25]  WarpNet ngf  64 → 32
+15:08:10             Reason: Lighter model: 4x fewer params (~1.9M vs 7.5M), ~2x faster per epoch. Enough capacity for 5k samples. Frees time for a full retrain today.
+15:08:10  
+15:08:10    [2026-03-25]  TryOnNet ngf  64 → 32
+15:08:10             Reason: Lighter model: matches WarpNet size reduction. Still has U-Net skip connections for detail recovery. Faster training needed to finish today.
+15:08:10  
+15:08:10    [2026-03-25]  LAMBDA_MASK  0 → 5.0
+15:08:10             Reason: Root cause of WarpNet plateau: L1/VGG compared warped flat cloth RGB vs on-body cloth RGB. These can never match well due to wrinkles/shadows/body shape — L1 floors at ~0.14. Mask loss (warped_mask vs pcm) provides a clean geometric signal (binary shapes, no texture noise). Weight=5.0 makes this the dominant gradient source for spatial deformation learning.
+15:08:10  
+15:08:10    [2026-03-25]  WarpNet ngf  32 → 64
+15:08:10             Reason: Restored to original capacity. 32 was insufficient — model couldn't learn geometric warping with fewer params. 10.6M params needed for dense flow prediction.
+15:08:10  
+15:08:10  
+15:08:11  ============================================================
+15:08:11    TRYONNET TRAINING  —  EPOCH LOG
+15:08:11  ============================================================
+15:08:11     Epoch    Avg L1    Avg VGG          LR   Epoch Time   Best L1  Status
+15:08:11    ------  --------  ---------  ----------  -----------  --------  --------------------
+15:10:37         1    0.5868     2.4686    2.00e-04       2m 25s    0.5868  NEW BEST  [saved tryon_best.pth]  [ckpt: tryon_epoch_001.pth]
+15:13:01         2    0.2773     2.2406    2.00e-04       2m 23s    0.2773  NEW BEST  [saved tryon_best.pth]  [ckpt: tryon_epoch_002.pth]
+15:15:25         3    0.2199     1.9374    2.00e-04       2m 23s    0.2199  NEW BEST  [saved tryon_best.pth]  [ckpt: tryon_epoch_003.pth]
+15:17:49         4    0.2139     1.8364    2.00e-04       2m 23s    0.2139  NEW BEST  [saved tryon_best.pth]  [ckpt: tryon_epoch_004.pth]
+15:20:13         5    0.2069     1.7432    2.00e-04       2m 23s    0.2069  NEW BEST  [saved tryon_best.pth]  [ckpt: tryon_epoch_005.pth]
+15:22:36         6    0.2064     1.7149    2.00e-04       2m 23s    0.2064  NEW BEST  [saved tryon_best.pth]  [ckpt: tryon_epoch_006.pth]
+15:25:00         7    0.2002     1.6554    2.00e-04       2m 23s    0.2002  NEW BEST  [saved tryon_best.pth]  [ckpt: tryon_epoch_007.pth]
+15:27:24         8    0.1982     1.6396    2.00e-04       2m 23s    0.1982  NEW BEST  [saved tryon_best.pth]  [ckpt: tryon_epoch_008.pth]
+15:29:48         9    0.1941     1.5973    2.00e-04       2m 23s    0.1941  NEW BEST  [saved tryon_best.pth]  [ckpt: tryon_epoch_009.pth]
+15:32:12        10    0.1916     1.5815    2.00e-04       2m 23s    0.1916  NEW BEST  [saved tryon_best.pth]  [ckpt: tryon_epoch_010.pth]
+15:34:35        11    0.1895     1.5690    2.00e-04       2m 23s    0.1895  NEW BEST  [saved tryon_best.pth]  [ckpt: tryon_epoch_011.pth]
+15:36:58        12    0.1875     1.5568    2.00e-04       2m 23s    0.1875  NEW BEST  [saved tryon_best.pth]  [ckpt: tryon_epoch_012.pth]
+15:39:22        13    0.1863     1.5485    2.00e-04       2m 23s    0.1863  NEW BEST  [saved tryon_best.pth]  [ckpt: tryon_epoch_013.pth]
+15:41:46        14    0.1827     1.5261    2.00e-04       2m 23s    0.1827  NEW BEST  [saved tryon_best.pth]  [ckpt: tryon_epoch_014.pth]
+15:44:09        15    0.1819     1.5209    2.00e-04       2m 23s    0.1819  NEW BEST  [saved tryon_best.pth]  [ckpt: tryon_epoch_015.pth]
+15:46:33        16    0.1802     1.5100    2.00e-04       2m 23s    0.1802  NEW BEST  [saved tryon_best.pth]  [ckpt: tryon_epoch_016.pth]
+15:48:58        17    0.1766     1.4893    2.00e-04       2m 24s    0.1766  NEW BEST  [saved tryon_best.pth]  [ckpt: tryon_epoch_017.pth]
+15:51:21        18    0.1766     1.4953    2.00e-04       2m 23s    0.1766  no improvement  1/20  [ckpt: tryon_epoch_018.pth]
+15:53:45        19    0.1750     1.4832    2.00e-04       2m 23s    0.1750  NEW BEST  [saved tryon_best.pth]  [ckpt: tryon_epoch_019.pth]
+15:56:09        20    0.1741     1.4776    2.00e-04       2m 23s    0.1741  NEW BEST  [saved tryon_best.pth]  [ckpt: tryon_epoch_020.pth]
+15:58:33        21    0.1734     1.4731    2.00e-04       2m 23s    0.1734  NEW BEST  [saved tryon_best.pth]  [ckpt: tryon_epoch_021.pth]
+16:00:57        22    0.1720     1.4678    2.00e-04       2m 24s    0.1720  NEW BEST  [saved tryon_best.pth]  [ckpt: tryon_epoch_022.pth]
+16:03:22        23    0.1699     1.4607    2.00e-04       2m 24s    0.1699  NEW BEST  [saved tryon_best.pth]  [ckpt: tryon_epoch_023.pth]
+16:05:47        24    0.1699     1.4585    2.00e-04       2m 24s    0.1699  no improvement  1/20  [ckpt: tryon_epoch_024.pth]
+16:08:11        25    0.1689     1.4527    2.00e-04       2m 24s    0.1689  NEW BEST  [saved tryon_best.pth]  [ckpt: tryon_epoch_025.pth]
+16:10:36        26    0.1725     1.4922    2.00e-04       2m 24s    0.1689  no improvement  1/20  [ckpt: tryon_epoch_026.pth]
+16:13:01        27    0.1692     1.4500    2.00e-04       2m 24s    0.1689  no improvement  2/20  [ckpt: tryon_epoch_027.pth]
+16:15:24        28    0.1663     1.4410    2.00e-04       2m 23s    0.1663  NEW BEST  [saved tryon_best.pth]  [ckpt: tryon_epoch_028.pth]
+16:17:49        29    0.1660     1.4390    2.00e-04       2m 24s    0.1660  NEW BEST  [saved tryon_best.pth]  [ckpt: tryon_epoch_029.pth]
+16:20:13        30    0.1656     1.4376    2.00e-04       2m 24s    0.1656  NEW BEST  [saved tryon_best.pth]  [ckpt: tryon_epoch_030.pth]
+16:22:36        31    0.1656     1.4404    2.00e-04       2m 23s    0.1656  no improvement  1/20  [ckpt: tryon_epoch_031.pth]
+16:25:01        32    0.1640     1.4267    2.00e-04       2m 24s    0.1640  NEW BEST  [saved tryon_best.pth]  [ckpt: tryon_epoch_032.pth]
+16:27:24        33    0.1641     1.4307    2.00e-04       2m 23s    0.1640  no improvement  1/20  [ckpt: tryon_epoch_033.pth]
+16:29:48        34    0.1632     1.4261    2.00e-04       2m 23s    0.1632  NEW BEST  [saved tryon_best.pth]  [ckpt: tryon_epoch_034.pth]
+16:32:11        35    0.1633     1.4315    2.00e-04       2m 23s    0.1632  no improvement  1/20  [ckpt: tryon_epoch_035.pth]
+16:34:35        36    0.1626     1.4223    2.00e-04       2m 23s    0.1626  NEW BEST  [saved tryon_best.pth]  [ckpt: tryon_epoch_036.pth]
+16:36:59        37    0.1618     1.4186    2.00e-04       2m 23s    0.1618  NEW BEST  [saved tryon_best.pth]  [ckpt: tryon_epoch_037.pth]
+16:39:23        38    0.1614     1.4245    2.00e-04       2m 23s    0.1614  NEW BEST  [saved tryon_best.pth]  [ckpt: tryon_epoch_038.pth]
+16:41:47        39    0.1609     1.4137    2.00e-04       2m 23s    0.1609  NEW BEST  [saved tryon_best.pth]  [ckpt: tryon_epoch_039.pth]
+16:44:11        40    0.1598     1.4056    2.00e-04       2m 23s    0.1598  NEW BEST  [saved tryon_best.pth]  [ckpt: tryon_epoch_040.pth]
+16:46:35        41    0.1593     1.4133    2.00e-04       2m 23s    0.1593  NEW BEST  [saved tryon_best.pth]  [ckpt: tryon_epoch_041.pth]
+16:48:59        42    0.1583     1.4076    2.00e-04       2m 23s    0.1583  NEW BEST  [saved tryon_best.pth]  [ckpt: tryon_epoch_042.pth]
+16:51:22        43    0.1587     1.4044    2.00e-04       2m 23s    0.1583  no improvement  1/20  [ckpt: tryon_epoch_043.pth]
+16:53:46        44    0.1588     1.4148    2.00e-04       2m 23s    0.1583  no improvement  2/20  [ckpt: tryon_epoch_044.pth]
+16:56:09        45    0.1588     1.4075    2.00e-04       2m 23s    0.1583  no improvement  3/20  [ckpt: tryon_epoch_045.pth]
+16:58:33        46    0.1572     1.4033    2.00e-04       2m 23s    0.1572  NEW BEST  [saved tryon_best.pth]  [ckpt: tryon_epoch_046.pth]
+17:00:57        47    0.1695     1.5119    2.00e-04       2m 23s    0.1572  no improvement  1/20  [ckpt: tryon_epoch_047.pth]
+17:03:21        48    0.1587     1.4090    2.00e-04       2m 23s    0.1572  no improvement  2/20  [ckpt: tryon_epoch_048.pth]
+17:05:45        49    0.1566     1.3979    2.00e-04       2m 23s    0.1566  NEW BEST  [saved tryon_best.pth]  [ckpt: tryon_epoch_049.pth]
+17:08:08        50    0.1554     1.3967    2.00e-04       2m 23s    0.1554  NEW BEST  [saved tryon_best.pth]  [ckpt: tryon_epoch_050.pth]
+17:10:33        51    0.1543     1.3946    1.96e-04       2m 23s    0.1543  NEW BEST  [saved tryon_best.pth]  [ckpt: tryon_epoch_051.pth]
+17:12:57        52    0.1546     1.3935    1.92e-04       2m 24s    0.1543  no improvement  1/20  [ckpt: tryon_epoch_052.pth]
+17:15:21        53    0.1527     1.3836    1.88e-04       2m 23s    0.1527  NEW BEST  [saved tryon_best.pth]  [ckpt: tryon_epoch_053.pth]
+17:17:46        54    0.1516     1.3870    1.84e-04       2m 24s    0.1516  NEW BEST  [saved tryon_best.pth]  [ckpt: tryon_epoch_054.pth]
+17:20:10        55    0.1515     1.3845    1.80e-04       2m 23s    0.1515  NEW BEST  [saved tryon_best.pth]  [ckpt: tryon_epoch_055.pth]
+17:22:34        56    0.1503     1.3873    1.76e-04       2m 23s    0.1503  NEW BEST  [saved tryon_best.pth]  [ckpt: tryon_epoch_056.pth]
+17:24:58        57    0.1500     1.3847    1.72e-04       2m 23s    0.1500  NEW BEST  [saved tryon_best.pth]  [ckpt: tryon_epoch_057.pth]
+17:27:22        58    0.1476     1.3756    1.68e-04       2m 23s    0.1476  NEW BEST  [saved tryon_best.pth]  [ckpt: tryon_epoch_058.pth]
+17:29:46        59    0.1462     1.3737    1.64e-04       2m 23s    0.1462  NEW BEST  [saved tryon_best.pth]  [ckpt: tryon_epoch_059.pth]
+17:32:10        60    0.1451     1.3749    1.60e-04       2m 23s    0.1451  NEW BEST  [saved tryon_best.pth]  [ckpt: tryon_epoch_060.pth]
+17:34:34        61    0.1437     1.3707    1.56e-04       2m 23s    0.1437  NEW BEST  [saved tryon_best.pth]  [ckpt: tryon_epoch_061.pth]
+17:36:58        62    0.1425     1.3713    1.52e-04       2m 23s    0.1425  NEW BEST  [saved tryon_best.pth]  [ckpt: tryon_epoch_062.pth]
+17:39:22        63    0.1406     1.3669    1.48e-04       2m 23s    0.1406  NEW BEST  [saved tryon_best.pth]  [ckpt: tryon_epoch_063.pth]
+17:41:46        64    0.1391     1.3647    1.44e-04       2m 23s    0.1391  NEW BEST  [saved tryon_best.pth]  [ckpt: tryon_epoch_064.pth]
+17:44:10        65    0.1361     1.3611    1.40e-04       2m 23s    0.1361  NEW BEST  [saved tryon_best.pth]  [ckpt: tryon_epoch_065.pth]
+17:46:34        66    0.1393     1.3704    1.36e-04       2m 24s    0.1361  no improvement  1/20  [ckpt: tryon_epoch_066.pth]
+17:48:58        67    0.1345     1.3610    1.32e-04       2m 23s    0.1345  NEW BEST  [saved tryon_best.pth]  [ckpt: tryon_epoch_067.pth]
+17:51:22        68    0.1322     1.3567    1.28e-04       2m 23s    0.1322  NEW BEST  [saved tryon_best.pth]  [ckpt: tryon_epoch_068.pth]
+17:53:47        69    0.1311     1.3589    1.24e-04       2m 24s    0.1311  NEW BEST  [saved tryon_best.pth]  [ckpt: tryon_epoch_069.pth]
+17:56:11        70    0.1286     1.3545    1.20e-04       2m 24s    0.1286  NEW BEST  [saved tryon_best.pth]  [ckpt: tryon_epoch_070.pth]
+17:58:35        71    0.1259     1.3554    1.16e-04       2m 23s    0.1259  NEW BEST  [saved tryon_best.pth]  [ckpt: tryon_epoch_071.pth]
+18:00:59        72    0.1247     1.3519    1.12e-04       2m 23s    0.1247  NEW BEST  [saved tryon_best.pth]  [ckpt: tryon_epoch_072.pth]
+18:03:23        73    0.1237     1.3507    1.08e-04       2m 23s    0.1237  NEW BEST  [saved tryon_best.pth]  [ckpt: tryon_epoch_073.pth]
+18:05:48        74    0.1192     1.3450    1.04e-04       2m 24s    0.1192  NEW BEST  [saved tryon_best.pth]  [ckpt: tryon_epoch_074.pth]
+18:08:12        75    0.1172     1.3464    1.00e-04       2m 23s    0.1172  NEW BEST  [saved tryon_best.pth]  [ckpt: tryon_epoch_075.pth]
+18:10:35        76    0.1150     1.3431    9.60e-05       2m 23s    0.1150  NEW BEST  [saved tryon_best.pth]  [ckpt: tryon_epoch_076.pth]
+18:12:59        77    0.1117     1.3400    9.20e-05       2m 23s    0.1117  NEW BEST  [saved tryon_best.pth]  [ckpt: tryon_epoch_077.pth]
+18:15:23        78    0.1091     1.3384    8.80e-05       2m 23s    0.1091  NEW BEST  [saved tryon_best.pth]  [ckpt: tryon_epoch_078.pth]
+18:17:48        79    0.1082     1.3373    8.40e-05       2m 24s    0.1082  NEW BEST  [saved tryon_best.pth]  [ckpt: tryon_epoch_079.pth]
+18:20:12        80    0.1050     1.3336    8.00e-05       2m 23s    0.1050  NEW BEST  [saved tryon_best.pth]  [ckpt: tryon_epoch_080.pth]
+18:22:35        81    0.1033     1.3348    7.60e-05       2m 23s    0.1033  NEW BEST  [saved tryon_best.pth]  [ckpt: tryon_epoch_081.pth]
+18:24:59        82    0.1007     1.3296    7.20e-05       2m 23s    0.1007  NEW BEST  [saved tryon_best.pth]  [ckpt: tryon_epoch_082.pth]
+18:27:22        83    0.1002     1.3293    6.80e-05       2m 22s    0.1002  NEW BEST  [saved tryon_best.pth]  [ckpt: tryon_epoch_083.pth]
+18:29:46        84    0.0974     1.3272    6.40e-05       2m 23s    0.0974  NEW BEST  [saved tryon_best.pth]  [ckpt: tryon_epoch_084.pth]
+18:32:10        85    0.0958     1.3252    6.00e-05       2m 23s    0.0958  NEW BEST  [saved tryon_best.pth]  [ckpt: tryon_epoch_085.pth]
+18:34:35        86    0.0948     1.3239    5.60e-05       2m 24s    0.0948  NEW BEST  [saved tryon_best.pth]  [ckpt: tryon_epoch_086.pth]
+18:36:59        87    0.0934     1.3216    5.20e-05       2m 24s    0.0934  NEW BEST  [saved tryon_best.pth]  [ckpt: tryon_epoch_087.pth]
+18:39:23        88    0.0910     1.3193    4.80e-05       2m 23s    0.0910  NEW BEST  [saved tryon_best.pth]  [ckpt: tryon_epoch_088.pth]
+18:41:46        89    0.0895     1.3172    4.40e-05       2m 23s    0.0895  NEW BEST  [saved tryon_best.pth]  [ckpt: tryon_epoch_089.pth]
+18:44:11        90    0.0890     1.3163    4.00e-05       2m 23s    0.0890  NEW BEST  [saved tryon_best.pth]  [ckpt: tryon_epoch_090.pth]
+18:46:35        91    0.0875     1.3146    3.60e-05       2m 23s    0.0875  NEW BEST  [saved tryon_best.pth]  [ckpt: tryon_epoch_091.pth]
+18:48:59        92    0.0864     1.3127    3.20e-05       2m 23s    0.0864  NEW BEST  [saved tryon_best.pth]  [ckpt: tryon_epoch_092.pth]
+18:51:22        93    0.0856     1.3113    2.80e-05       2m 23s    0.0856  NEW BEST  [saved tryon_best.pth]  [ckpt: tryon_epoch_093.pth]
+18:53:46        94    0.0846     1.3099    2.40e-05       2m 23s    0.0846  NEW BEST  [saved tryon_best.pth]  [ckpt: tryon_epoch_094.pth]
+18:56:11        95    0.0839     1.3089    2.00e-05       2m 24s    0.0839  NEW BEST  [saved tryon_best.pth]  [ckpt: tryon_epoch_095.pth]
+18:58:35        96    0.0828     1.3070    1.60e-05       2m 24s    0.0828  NEW BEST  [saved tryon_best.pth]  [ckpt: tryon_epoch_096.pth]
+19:01:00        97    0.0821     1.3058    1.20e-05       2m 24s    0.0821  NEW BEST  [saved tryon_best.pth]  [ckpt: tryon_epoch_097.pth]
+19:03:24        98    0.0814     1.3045    8.00e-06       2m 24s    0.0814  NEW BEST  [saved tryon_best.pth]  [ckpt: tryon_epoch_098.pth]
+19:05:49        99    0.0809     1.3041    4.00e-06       2m 24s    0.0809  NEW BEST  [saved tryon_best.pth]  [ckpt: tryon_epoch_099.pth]
+19:08:13       100    0.0805     1.3025    0.00e+00       2m 24s    0.0805  NEW BEST  [saved tryon_best.pth]  [ckpt: tryon_epoch_100.pth]
+19:08:13  ============================================================
+19:08:13    TRYONNET TRAINING  —  FINAL SUMMARY
+19:08:13  ============================================================
+19:08:13    Total epochs trained : 100
+19:08:13    Best L1 loss         : 0.0805  (epoch 100)
+19:08:13    Total training time  : 4h 00m 01s
+19:08:13    Best checkpoint      : C:\Virtual_try_on\checkpoints/tryon_best.pth
+19:08:13    CSV metrics log      : C:\Virtual_try_on\logs/tryon_metrics.csv
+19:08:13  

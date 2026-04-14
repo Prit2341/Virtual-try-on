@@ -16,7 +16,6 @@ import os
 import random
 
 import torch
-import torch.nn.functional as F
 import numpy as np
 import cv2
 from pathlib import Path
@@ -26,9 +25,10 @@ from model.tryon_model import TryOnNet
 from model.warp_utils import warp_cloth
 
 DEVICE      = "cuda" if torch.cuda.is_available() else "cpu"
-DATA_DIR    = "dataset/train/tensors"
-CKPT_DIR    = "checkpoints"
-RESULTS_DIR = "results"
+_BASE       = Path(__file__).resolve().parent
+DATA_DIR    = str(_BASE / "dataset" / "test" / "tensors")
+CKPT_DIR    = str(_BASE / "checkpoints")
+RESULTS_DIR = str(_BASE / "results")
 
 
 def tensor_to_rgb(t):
@@ -42,20 +42,31 @@ def main():
     p.add_argument("--data",       default=DATA_DIR)
     p.add_argument("--warp-ckpt",  default="", dest="warp_ckpt")
     p.add_argument("--tryon-ckpt", default="", dest="tryon_ckpt")
-    p.add_argument("--save",       default=RESULTS_DIR)
+    p.add_argument("--save",       default=RESULTS_DIR, dest="save")
+    p.add_argument("--ngf",        type=int, default=64)
+    p.add_argument("--flow-scale", type=float, default=0.25, dest="flow_scale")
     args = p.parse_args()
 
-    # Auto-detect latest checkpoints if not specified
+    ckpt_dir = CKPT_DIR
+    save_dir = args.save
+
+    # Auto-detect checkpoints — prefer *_best.pth, fall back to latest epoch ckpt
     if not args.warp_ckpt:
-        ckpts = sorted(Path(CKPT_DIR).glob("warp_*.pth"))
-        args.warp_ckpt = str(ckpts[-1]) if ckpts else ""
+        best = Path(ckpt_dir) / "warp_best.pth"
+        args.warp_ckpt = str(best) if best.exists() else ""
+        if not args.warp_ckpt:
+            ckpts = sorted(Path(ckpt_dir).glob("warp_epoch_*.pth"))
+            args.warp_ckpt = str(ckpts[-1]) if ckpts else ""
     if not args.tryon_ckpt:
-        ckpts = sorted(Path(CKPT_DIR).glob("tryon_*.pth"))
-        args.tryon_ckpt = str(ckpts[-1]) if ckpts else ""
+        best = Path(ckpt_dir) / "tryon_best.pth"
+        args.tryon_ckpt = str(best) if best.exists() else ""
+        if not args.tryon_ckpt:
+            ckpts = sorted(Path(ckpt_dir).glob("tryon_epoch_*.pth"))
+            args.tryon_ckpt = str(ckpts[-1]) if ckpts else ""
 
     # Load models
-    warp_net  = WarpNet().to(DEVICE).eval()
-    tryon_net = TryOnNet().to(DEVICE).eval()
+    warp_net  = WarpNet(ngf=args.ngf, flow_scale=args.flow_scale).to(DEVICE).eval()
+    tryon_net = TryOnNet(ngf=args.ngf).to(DEVICE).eval()
 
     if args.warp_ckpt:
         warp_net.load_state_dict(
@@ -77,8 +88,8 @@ def main():
     files = sorted(Path(args.data).glob("*.pt"))
     chosen = random.sample(files, min(args.n, len(files)))
 
-    os.makedirs(args.save, exist_ok=True)
-    print(f"\nGenerating {len(chosen)} results → {args.save}/\n")
+    os.makedirs(save_dir, exist_ok=True)
+    print(f"\nGenerating {len(chosen)} results -> {save_dir}/\n")
 
     for f in chosen:
         data = torch.load(f, map_location="cpu", weights_only=False)
@@ -93,11 +104,9 @@ def main():
             flow        = warp_net(warp_in)
             warped      = warp_cloth(cl, flow)
             warped_mask = warp_cloth(cm, flow)
+            warped      = warped * warped_mask   # mask out background leakage
 
-            pm       = data["parse_map"].unsqueeze(0).to(DEVICE)
-            parse_oh = F.one_hot(pm.long(), 18).permute(0, 3, 1, 2).float()
-
-            tryon_in = torch.cat([ag, warped, warped_mask, pose, parse_oh], 1)  # 43ch
+            tryon_in = torch.cat([ag, warped, warped_mask, pose], 1)  # 25ch
             output   = tryon_net(tryon_in)
 
         # Build comparison strip: person | cloth | agnostic | warped | output
@@ -112,7 +121,7 @@ def main():
             [person_rgb, cloth_rgb, agnostic_rgb, warped_rgb, output_rgb], axis=1
         )
 
-        out_path = Path(args.save) / f"{f.stem}.jpg"
+        out_path = Path(save_dir) / f"{f.stem}.jpg"
         cv2.imwrite(
             str(out_path),
             cv2.cvtColor(strip, cv2.COLOR_RGB2BGR),
@@ -120,7 +129,7 @@ def main():
         )
         print(f"  {f.stem}")
 
-    print(f"\nDone! {len(chosen)} results saved to {args.save}/")
+    print(f"\nDone! {len(chosen)} results saved to {save_dir}/")
 
 
 if __name__ == "__main__":
